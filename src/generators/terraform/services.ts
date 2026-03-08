@@ -1,22 +1,33 @@
 import type { AzureService } from '../../types/index.js';
 import { toTfId } from './network.js';
 
-export function renderServiceTerraform(svc: AzureService): string {
-  const id   = toTfId(svc.name);
-  const sub  = svc.subnetPlacement
+function getSubnetRef(svc: AzureService): string {
+  return svc.subnetPlacement
     ? `azurerm_subnet.${toTfId(svc.subnetPlacement)}.id`
     : 'azurerm_subnet.backend.id';
+}
 
-  switch (svc.type) {
-    case 'app-service':    return appService(id, svc.name, sub);
-    case 'aks':            return aks(id, svc.name, sub);
-    case 'azure-sql':      return azureSql(id, svc.name, sub);
-    case 'cosmos-db':      return cosmosDb(id, svc.name, sub);
-    case 'storage-account':return storageAccount(id, svc.name, sub);
-    case 'key-vault':      return keyVault(id, svc.name, sub);
-    case 'api-management': return apiManagement(id, svc.name, sub);
-    case 'container-apps': return containerApps(id, svc.name, sub);
-  }
+export function renderServiceTerraform(services: AzureService[]): string {
+  if (services.length === 0) return '';
+
+  const type = services[0].type;
+  const blocks = services.map(svc => {
+    const id = toTfId(svc.name);
+    const sub = getSubnetRef(svc);
+    switch (type) {
+      case 'app-service':     return appService(id, svc.name, sub);
+      case 'aks':             return aks(id, svc.name, sub);
+      case 'azure-sql':       return azureSql(id, svc.name, sub);
+      case 'cosmos-db':       return cosmosDb(id, svc.name, sub);
+      case 'storage-account': return storageAccount(id, svc.name, sub);
+      case 'key-vault':       return keyVault(id, svc.name, sub);
+      case 'api-management':  return apiManagement(id, svc.name, sub);
+      case 'container-apps':  return containerApps(id, svc.name, sub);
+    }
+  });
+  // Key Vault needs the client config data block once per file, not per instance
+  const prefix = type === 'key-vault' ? keyVaultDataBlock() : '';
+  return prefix + blocks.join('\n\n');
 }
 
 // ─── App Service ──────────────────────────────────────────────────────────────
@@ -189,10 +200,13 @@ output "${id}_blob_endpoint" {
 
 // ─── Key Vault ────────────────────────────────────────────────────────────────
 
-function keyVault(id: string, name: string, subnetRef: string): string {
+function keyVaultDataBlock(): string {
   return `data "azurerm_client_config" "current" {}
+`;
+}
 
-resource "azurerm_key_vault" "${id}" {
+function keyVault(id: string, name: string, subnetRef: string): string {
+  return `resource "azurerm_key_vault" "${id}" {
   name                = "${name}"
   location            = azurerm_resource_group.main.location
   resource_group_name = azurerm_resource_group.main.name
