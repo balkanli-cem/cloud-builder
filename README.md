@@ -18,7 +18,7 @@ Generated files are written to `output/<projectName>/bicep/` or `output/<project
 ## Install
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/balkanli-cem/cloud-builder.git
 cd cloud-builder
 npm install
 ```
