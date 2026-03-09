@@ -1,5 +1,5 @@
 // Catalog of available Azure services shown in the service-selection screen
-import type { AzureServiceType } from '../../types/index.js';
+import type { AzureServiceType } from '../../types/index';
 
 export interface ServiceEntry {
   type: AzureServiceType;

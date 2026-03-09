@@ -1,8 +1,8 @@
 import { checkbox, input, select } from '@inquirer/prompts';
 import chalk from 'chalk';
 import boxen from 'boxen';
-import { SERVICE_CATALOG } from '../../core/services/catalog.js';
-import type { AzureService, SubnetConfig } from '../../types/index.js';
+import { SERVICE_CATALOG } from '../../core/services/catalog';
+import type { AzureService, SubnetConfig } from '../../types/index';
 
 const NAME_REGEX = /^[a-z0-9-]+$/;
 

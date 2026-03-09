@@ -1,5 +1,5 @@
-import type { AzureService } from '../../types/index.js';
-import { toTfId } from './network.js';
+import type { AzureService } from '../../types/index';
+import { toTfId } from './network';
 
 function getSubnetRef(svc: AzureService): string {
   return svc.subnetPlacement

@@ -1,9 +1,9 @@
 import fs from 'fs/promises';
 import path from 'path';
-import type { ProjectConfig } from '../../types/index.js';
-import { renderMainBicep } from './main.js';
-import { renderNetworkBicep } from './network.js';
-import { renderServiceBicep } from './services.js';
+import type { ProjectConfig } from '../../types/index';
+import { renderMainBicep } from './main';
+import { renderNetworkBicep } from './network';
+import { renderServiceBicep } from './services';
 
 export async function generateBicep(config: ProjectConfig, outputDir: string): Promise<void> {
   const modulesDir = path.join(outputDir, 'modules');

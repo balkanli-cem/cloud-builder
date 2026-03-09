@@ -1,5 +1,5 @@
 // Returns the default safe network layout auto-applied to every project
-import type { NetworkConfig } from '../../types/index.js';
+import type { NetworkConfig } from '../../types/index';
 
 export function buildDefaultNetwork(projectName: string): NetworkConfig {
   return {

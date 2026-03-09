@@ -1,4 +1,4 @@
-import { runCLI } from './cli/index.js';
+import { runCLI } from './cli/index';
 
 async function main(): Promise<void> {
   await runCLI();

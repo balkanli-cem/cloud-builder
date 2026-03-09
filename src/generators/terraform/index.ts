@@ -1,9 +1,9 @@
 import fs from 'fs/promises';
 import path from 'path';
-import type { AzureService, ProjectConfig } from '../../types/index.js';
-import { renderMainTf, renderVariablesTf, renderOutputsTf } from './main.js';
-import { renderNetworkTerraform } from './network.js';
-import { renderServiceTerraform } from './services.js';
+import type { AzureService, ProjectConfig } from '../../types/index';
+import { renderMainTf, renderVariablesTf, renderOutputsTf } from './main';
+import { renderNetworkTerraform } from './network';
+import { renderServiceTerraform } from './services';
 
 export async function generateTerraform(config: ProjectConfig, outputDir: string): Promise<void> {
   await fs.mkdir(outputDir, { recursive: true });

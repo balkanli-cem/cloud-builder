@@ -1,4 +1,4 @@
-import type { ProjectConfig } from '../../types/index.js';
+import type { ProjectConfig } from '../../types/index';
 
 export function renderMainTf(config: ProjectConfig): string {
   const needsRandom = config.services.some(s => s.type === 'azure-sql');

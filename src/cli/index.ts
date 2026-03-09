@@ -1,12 +1,12 @@
 import chalk from 'chalk';
 import path from 'path';
-import { promptProject }  from './screens/project.js';
-import { promptNetwork }  from './screens/network.js';
-import { promptServices } from './screens/services.js';
-import { promptSummary }  from './screens/summary.js';
-import { generateBicep }      from '../generators/bicep/index.js';
-import { generateTerraform }  from '../generators/terraform/index.js';
-import type { ProjectConfig } from '../types/index.js';
+import { promptProject }  from './screens/project';
+import { promptNetwork }  from './screens/network';
+import { promptServices } from './screens/services';
+import { promptSummary }  from './screens/summary';
+import { generateBicep }      from '../generators/bicep/index';
+import { generateTerraform }  from '../generators/terraform/index';
+import type { ProjectConfig } from '../types/index';
 
 export async function runCLI(): Promise<void> {
   // Step 1 — project basics

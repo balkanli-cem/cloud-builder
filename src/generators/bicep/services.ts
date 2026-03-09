@@ -1,4 +1,4 @@
-import type { AzureServiceType } from '../../types/index.js';
+import type { AzureServiceType } from '../../types/index';
 
 export function renderServiceBicep(type: AzureServiceType): string {
   switch (type) {

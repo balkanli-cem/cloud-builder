@@ -1,8 +1,8 @@
 import { input, confirm } from '@inquirer/prompts';
 import chalk from 'chalk';
 import boxen from 'boxen';
-import { buildDefaultNetwork } from '../../core/network/defaults.js';
-import type { NetworkConfig, SubnetConfig } from '../../types/index.js';
+import { buildDefaultNetwork } from '../../core/network/defaults';
+import type { NetworkConfig, SubnetConfig } from '../../types/index';
 
 const CIDR_REGEX = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d{1,2}$/;
 const NAME_REGEX = /^[a-z0-9-]+$/;

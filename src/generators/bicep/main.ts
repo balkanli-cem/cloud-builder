@@ -1,4 +1,4 @@
-import type { ProjectConfig } from '../../types/index.js';
+import type { ProjectConfig } from '../../types/index';
 
 export function renderMainBicep(config: ProjectConfig): string {
   const subnetArray = config.network.subnets

@@ -2,7 +2,7 @@ import { input, select } from '@inquirer/prompts';
 import chalk from 'chalk';
 import figlet from 'figlet';
 import boxen from 'boxen';
-import type { AzureRegion, ProjectConfig } from '../../types/index.js';
+import type { AzureRegion, ProjectConfig } from '../../types/index';
 
 type ProjectResult = Pick<ProjectConfig, 'projectName' | 'resourceGroupName' | 'region'>;
 

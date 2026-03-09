@@ -1,4 +1,4 @@
-import type { NetworkConfig } from '../../types/index.js';
+import type { NetworkConfig } from '../../types/index';
 
 export function renderNetworkBicep(network: NetworkConfig): string {
   const subnetItems = network.subnets

@@ -1,8 +1,8 @@
 import { confirm, select } from '@inquirer/prompts';
 import chalk from 'chalk';
 import boxen from 'boxen';
-import { SERVICE_CATALOG } from '../../core/services/catalog.js';
-import type { ProjectConfig, AzureRegion, OutputFormat } from '../../types/index.js';
+import { SERVICE_CATALOG } from '../../core/services/catalog';
+import type { ProjectConfig, AzureRegion, OutputFormat } from '../../types/index';
 
 export interface SummaryResult {
   confirmed: boolean;
