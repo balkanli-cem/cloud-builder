@@ -8,6 +8,7 @@ import { generateBicep } from './generators/bicep/index';
 import { generateTerraform } from './generators/terraform/index';
 import { buildDefaultNetwork } from './core/network/defaults';
 import { SERVICE_CATALOG } from './core/services/catalog';
+import { saveGeneration } from './db/client';
 import type { ProjectConfig } from './types/index';
 
 const app = express();
@@ -50,6 +51,9 @@ app.post('/api/generate', async (req, res) => {
     } else {
       await generateTerraform(config, tempDir);
     }
+
+    // Persist generation details to Azure SQL when connection string is set
+    saveGeneration(config, format).catch((err) => console.error('DB save:', err));
 
     const archive = archiver('zip', { zlib: { level: 6 } });
     res.attachment(`${config.projectName}-${format}.zip`);

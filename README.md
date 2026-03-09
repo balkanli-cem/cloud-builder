@@ -42,6 +42,8 @@ npm run server
 
 Open **http://localhost:3000**. Complete the steps and download Bicep or Terraform as a ZIP.
 
+When **AZURE_SQL_CONNECTION_STRING** is set (e.g. in Azure App Service), each generation is stored in an Azure SQL table for history. See [deploy/README.md](deploy/README.md) for Terraform (App Service + Azure SQL) and deployment steps.
+
 ## Scripts
 
 | Command           | Description                          |

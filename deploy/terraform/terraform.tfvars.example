@@ -1,0 +1,10 @@
+# Copy to terraform.tfvars and set values. Do not commit terraform.tfvars.
+
+resource_group_name = "rg-cloud-builder-prod"
+location            = "westeurope"
+environment         = "prod"
+app_name            = "cloud-builder"
+
+sql_admin_login    = "sqladmin"
+sql_admin_password = "YourSecurePassword123!"
+sql_database_sku   = "Basic"
