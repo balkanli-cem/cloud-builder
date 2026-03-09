@@ -31,14 +31,27 @@ npm start
 
 Or `npm run dev`. Follow the prompts; when done, open `output/<projectName>/` for your IaC.
 
+## Web app (browser UI)
+
+Build the frontend and run the server to use the wizard in the browser (e.g. for deployment to App Service):
+
+```bash
+npm run build:web
+npm run server
+```
+
+Open **http://localhost:3000**. Complete the steps and download Bicep or Terraform as a ZIP.
+
 ## Scripts
 
-| Command        | Description                    |
-|----------------|--------------------------------|
-| `npm start`    | Run the CLI (ts-node)          |
-| `npm run dev`  | Same as start                  |
-| `npm run build`| Compile TypeScript to `dist/`  |
-| `npm test`     | Run tests                      |
+| Command           | Description                          |
+|-------------------|--------------------------------------|
+| `npm start`       | Run the CLI (ts-node)                |
+| `npm run dev`     | Same as start                        |
+| `npm run build`   | Compile TypeScript to `dist/`        |
+| `npm run build:web` | Install web deps and build frontend |
+| `npm run server`  | Run web server (serve UI + API)      |
+| `npm test`        | Run tests                            |
 
 ## Supported Azure services
 
