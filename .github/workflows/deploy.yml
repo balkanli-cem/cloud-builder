@@ -1,0 +1,45 @@
+# Deploy Cloud Builder to Azure Web App (zip deploy).
+# Requires GitHub secret: AZURE_WEBAPP_PUBLISH_PROFILE (download from App Service > Get publish profile).
+
+name: Deploy to Azure Web App
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  AZURE_WEBAPP_NAME: cloud-builder-dev-app   # set to your Web App name if different
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Node app
+        run: npm run build
+
+      - name: Build web UI
+        run: npm run build:web
+
+      - name: Create deployment package
+        run: |
+          zip -r app.zip dist web-dist src package.json package-lock.json tsconfig.json
+
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: app.zip

@@ -69,6 +69,26 @@ az webapp deployment source config-zip --resource-group <resource_group_name> --
 
 If you omit `node_modules/` from the zip, **SCM_DO_BUILD_DURING_DEPLOYMENT** (set by Terraform) ensures the server runs `npm install` on deploy.
 
+### 4. CI/CD with GitHub Actions
+
+A workflow (`.github/workflows/deploy.yml`) deploys to the Web App on every push to `main` (and can be run manually).
+
+**One-time setup:**
+
+1. **Get the publish profile** from Azure:
+   - Portal: App Service → **Get publish profile** (download the file).
+   - Or PowerShell:  
+     `Get-AzWebAppPublishProfile -ResourceGroupName "AZ104-RG-cloud-builder-dev" -Name "cloud-builder-dev-app" -Format WebDeploy | Out-File profile.xml`  
+     Then copy the file contents (one long line).
+
+2. **Add a GitHub secret:** Repo → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**  
+   - Name: `AZURE_WEBAPP_PUBLISH_PROFILE`  
+   - Value: paste the full publish profile contents.
+
+3. **Match the app name** in the workflow: in `.github/workflows/deploy.yml`, set `AZURE_WEBAPP_NAME` to your Web App name (default is `cloud-builder-dev-app`).
+
+After that, pushes to `main` (and manual runs of the workflow) will build and deploy the zip to the Web App.
+
 The app expects **PORT** (set by App Service) and **AZURE_SQL_CONNECTION_STRING** (set by Terraform).
 
 ## Optional: run locally with DB
