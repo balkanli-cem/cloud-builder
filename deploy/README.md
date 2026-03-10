@@ -11,7 +11,7 @@ This folder contains Terraform to deploy the Cloud Builder web app and an Azure 
 
 ## Prerequisites
 
-- Azure CLI logged in: `az login`
+- Azure PowerShell (`Az` module) and logged in: `Connect-AzAccount` (or Azure CLI: `az login`)
 - Terraform installed (e.g. 1.x)
 
 ## 1. Terraform
@@ -43,15 +43,31 @@ From the repo root:
 
 1. Build the web UI: `npm run build:web`
 2. Build the Node app: `npm run build`
-3. Deploy the application to the Web App:
-   - From repo root: build with `npm run build` and `npm run build:web`.
-   - Zip `dist/`, `web-dist/`, `package.json`, and `package-lock.json` (and optionally `node_modules/` to skip install on the server).
-   - If you omit `node_modules/`, ensure **SCM_DO_BUILD_DURING_DEPLOYMENT** is `true` (set by Terraform) so the server runs `npm install` on deploy.
-   - Set the Web App **Startup Command** to: `node dist/server.js`  
-     (Azure Portal → App Service → Configuration → General settings → Startup Command).
-   - Deploy the zip:  
-     `az webapp deployment source config-zip --resource-group <resource_group_name> --name <web_app_name> --src app.zip`
-   - Or use GitHub Actions / Azure DevOps to build and zip deploy on push.
+3. Deploy to the Web App (PowerShell):
+
+```powershell
+# Replace with your resource group and web app name (from Terraform outputs)
+$ResourceGroupName = "AZ104-RG-cloud-builder-dev"
+$WebAppName        = "cloud-builder-dev-app"
+
+# Set startup command so the app runs the server
+Set-AzWebApp -ResourceGroupName $ResourceGroupName -Name $WebAppName -AppCommandLine "node dist/server.js"
+
+# Create zip: App Service runs npm install then npm run build, so include tsconfig.json and src/ for tsc
+Compress-Archive -Path dist, web-dist, src, package.json, package-lock.json, tsconfig.json -DestinationPath app.zip -Force
+
+# Deploy the zip
+Publish-AzWebApp -ResourceGroupName $ResourceGroupName -Name $WebAppName -ArchivePath (Resolve-Path app.zip).Path -Force
+```
+
+**Azure CLI alternative:**
+
+```bash
+az webapp config set --resource-group <resource_group_name> --name <web_app_name> --startup-file "node dist/server.js"
+az webapp deployment source config-zip --resource-group <resource_group_name> --name <web_app_name> --src app.zip
+```
+
+If you omit `node_modules/` from the zip, **SCM_DO_BUILD_DURING_DEPLOYMENT** (set by Terraform) ensures the server runs `npm install` on deploy.
 
 The app expects **PORT** (set by App Service) and **AZURE_SQL_CONNECTION_STRING** (set by Terraform).
 
@@ -59,9 +75,13 @@ The app expects **PORT** (set by App Service) and **AZURE_SQL_CONNECTION_STRING*
 
 Set the same connection string (from Terraform output or Key Vault) and run the server:
 
-```bash
+**PowerShell:**
+
+```powershell
 $env:AZURE_SQL_CONNECTION_STRING = "Server=tcp:...;Database=cloudbuilder;User ID=...;Password=...;Encrypt=True;..."
 npm run server
 ```
+
+**Bash:** `export AZURE_SQL_CONNECTION_STRING="..."; npm run server`
 
 Generations will be stored in the **Generations** table (ProjectName, ResourceGroupName, Region, NetworkJson, ServicesJson, Format, CreatedAt).
