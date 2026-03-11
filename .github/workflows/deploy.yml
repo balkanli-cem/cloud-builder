@@ -1,11 +1,20 @@
 # Deploy Cloud Builder to Azure Web App (zip deploy).
 # Requires GitHub secret: AZURE_WEBAPP_PUBLISH_PROFILE (download from App Service > Get publish profile).
+# On push to main, runs only when application code changes (not for README, deploy/, or workflow file edits).
 
 name: Deploy to Azure Web App
 
 on:
   push:
     branches: [main]
+    paths:
+      - 'src/**'
+      - 'web/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig.json'
+      - 'jest.config.js'
+      - 'tests/**'
   workflow_dispatch:
 
 env:

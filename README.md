@@ -1,6 +1,6 @@
 # Cloud Builder
 
-Interactive Azure infrastructure builder that generates **Bicep** or **Terraform** from a step-by-step wizard.
+Interactive Azure infrastructure builder that generates **Bicep** or **Terraform** from a step-by-step wizard. Use it from the terminal (CLI) or in the browser (web app). Deployments can be recorded in Azure SQL.
 
 ## What it does
 
@@ -9,7 +9,7 @@ Interactive Azure infrastructure builder that generates **Bicep** or **Terraform
 3. **Services** — Select Azure services, set resource names and subnet placement.
 4. **Summary** — Review, choose Bicep or Terraform, then generate.
 
-Generated files are written to `output/<projectName>/bicep/` or `output/<projectName>/terraform/`.
+Generated files are written to `output/<projectName>/bicep/` or `output/<projectName>/terraform/`. When running as the web app with **AZURE_SQL_CONNECTION_STRING** set, each generation is stored in an Azure SQL table for history.
 
 ## Prerequisites
 
@@ -25,15 +25,15 @@ npm install
 
 ## Run
 
+### CLI (terminal)
+
 ```bash
 npm start
 ```
 
 Or `npm run dev`. Follow the prompts; when done, open `output/<projectName>/` for your IaC.
 
-## Web app (browser UI)
-
-Build the frontend and run the server to use the wizard in the browser (e.g. for deployment to App Service):
+### Web app (browser)
 
 ```bash
 npm run build:web
@@ -42,18 +42,16 @@ npm run server
 
 Open **http://localhost:3000**. Complete the steps and download Bicep or Terraform as a ZIP.
 
-When **AZURE_SQL_CONNECTION_STRING** is set (e.g. in Azure App Service), each generation is stored in an Azure SQL table for history. See [deploy/README.md](deploy/README.md) for Terraform (App Service + Azure SQL) and deployment steps.
-
 ## Scripts
 
-| Command           | Description                          |
-|-------------------|--------------------------------------|
-| `npm start`       | Run the CLI (ts-node)                |
-| `npm run dev`     | Same as start                        |
-| `npm run build`   | Compile TypeScript to `dist/`        |
-| `npm run build:web` | Install web deps and build frontend |
-| `npm run server`  | Run web server (serve UI + API)      |
-| `npm test`        | Run tests                            |
+| Command             | Description                              |
+|---------------------|------------------------------------------|
+| `npm start`         | Run the CLI (ts-node)                    |
+| `npm run dev`       | Same as start                            |
+| `npm run build`     | Compile TypeScript to `dist/`            |
+| `npm run build:web` | Install web deps and build frontend      |
+| `npm run server`    | Run web server (serve UI + API)          |
+| `npm test`          | Run tests (Jest)                         |
 
 ## Supported Azure services
 
@@ -70,6 +68,16 @@ When **AZURE_SQL_CONNECTION_STRING** is set (e.g. in Azure App Service), each ge
 
 - **Bicep:** `main.bicep` plus `modules/network.bicep` and one module per service type (e.g. `cosmos-db.bicep`). Multiple instances of the same type each get their own deployment in `main.bicep`.
 - **Terraform:** `main.tf`, `variables.tf`, `outputs.tf`, `network.tf`, and one `.tf` file per service type. Multiple instances of the same type are emitted as multiple resources in that file.
+
+## Tests
+
+Tests live under `tests/` and use Jest (see `jest.config.js`). Run with `npm test`. CI runs on every push and pull request to `main` (see `.github/workflows/ci.yml`).
+
+## Deploy to Azure
+
+Terraform in **[deploy/terraform/](deploy/terraform/)** provisions the Web App (Node 20) and an Azure SQL database. The app uses the connection string from app settings to store generation history. Step-by-step and CI/CD setup are in **[deploy/README.md](deploy/README.md)**.
+
+- **CI/CD:** GitHub Actions (`.github/workflows/deploy.yml`) deploys to the Web App on push to `main` **only when application code changes** (e.g. `src/`, `web/`, `package.json`, `tests/`). Changes to README, `deploy/`, or the workflow file alone do not trigger a deploy. You can also run the deploy workflow manually.
 
 ## License
 
