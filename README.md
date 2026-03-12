@@ -5,7 +5,7 @@ Interactive Azure infrastructure builder that generates **Bicep** or **Terraform
 ## What it does
 
 1. **Project** — Name, resource group, Azure region (West Europe, Sweden Central, Belgium Central).
-2. **Network** — Default or custom VNet and subnets (e.g. Frontend, Backend, DB).
+2. **Network** — Use the default VNet layout or customize: VNet name, address space (CIDR), and each subnet’s address prefix (e.g. Frontend, Backend, DB). Available in both CLI and web app.
 3. **Services** — Select Azure services, set resource names and subnet placement.
 4. **Summary** — Review, choose Bicep or Terraform, then generate.
 
