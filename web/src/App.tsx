@@ -1,9 +1,13 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import type { ProjectConfig, NetworkConfig, AzureService, ServiceEntry } from './types';
 import { StepProject } from './steps/StepProject';
 import { StepNetwork } from './steps/StepNetwork';
 import { StepServices } from './steps/StepServices';
 import { StepSummary } from './steps/StepSummary';
+import { Login } from './steps/Login';
+import { Register } from './steps/Register';
+
+const AUTH_TOKEN_KEY = 'cloud-builder-token';
 
 const REGIONS: { value: ProjectConfig['region']; label: string }[] = [
   { value: 'westeurope', label: 'West Europe' },
@@ -11,7 +15,13 @@ const REGIONS: { value: ProjectConfig['region']; label: string }[] = [
   { value: 'belgiumcentral', label: 'Belgium Central' },
 ];
 
+function authHeaders(token: string): HeadersInit {
+  return { Authorization: `Bearer ${token}` };
+}
+
 export default function App() {
+  const [token, setTokenState] = useState<string | null>(() => localStorage.getItem(AUTH_TOKEN_KEY));
+  const [showRegister, setShowRegister] = useState(false);
   const [step, setStep] = useState(1);
   const [projectName, setProjectName] = useState('');
   const [resourceGroupName, setResourceGroupName] = useState('');
@@ -23,12 +33,29 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [downloadedFormats, setDownloadedFormats] = useState<('bicep' | 'terraform')[]>([]);
 
+  const setToken = useCallback((t: string) => {
+    setTokenState(t);
+    localStorage.setItem(AUTH_TOKEN_KEY, t);
+  }, []);
+  const logout = useCallback(() => {
+    setTokenState(null);
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+  }, []);
+
+  useEffect(() => {
+    if (!token) setCatalog([]);
+  }, [token]);
+
   const fetchCatalog = useCallback(async () => {
-    if (catalog.length > 0) return;
-    const res = await fetch('/api/catalog');
+    if (!token || catalog.length > 0) return;
+    const res = await fetch('/api/catalog', { headers: authHeaders(token) });
+    if (res.status === 401) {
+      logout();
+      return;
+    }
     const data = await res.json();
     setCatalog(data.services || []);
-  }, [catalog.length]);
+  }, [token, catalog.length, logout]);
 
   const config: ProjectConfig | null =
     projectName && network && services.length > 0
@@ -41,11 +68,46 @@ export default function App() {
         }
       : null;
 
+  if (!token) {
+    return (
+      <>
+        <header style={{ marginBottom: '2rem', textAlign: 'center' }}>
+          <h1 style={{ fontSize: '1.75rem', fontWeight: 700, margin: 0 }}>Cloud Builder</h1>
+          <p style={{ color: '#94a3b8', marginTop: '0.25rem' }}>Azure infrastructure wizard</p>
+        </header>
+        {showRegister ? (
+          <Register
+            onRegistered={() => setShowRegister(false)}
+            onGoLogin={() => setShowRegister(false)}
+          />
+        ) : (
+          <Login onLogin={setToken} onGoRegister={() => setShowRegister(true)} />
+        )}
+      </>
+    );
+  }
+
   return (
     <>
       <header style={{ marginBottom: '2rem', textAlign: 'center' }}>
         <h1 style={{ fontSize: '1.75rem', fontWeight: 700, margin: 0 }}>Cloud Builder</h1>
         <p style={{ color: '#94a3b8', marginTop: '0.25rem' }}>Azure infrastructure wizard</p>
+        <button
+          type="button"
+          onClick={logout}
+          style={{
+            marginTop: '0.5rem',
+            padding: '0.25rem 0.5rem',
+            background: 'transparent',
+            border: '1px solid #475569',
+            borderRadius: '4px',
+            color: '#94a3b8',
+            fontSize: '0.8125rem',
+            cursor: 'pointer',
+          }}
+        >
+          Sign out
+        </button>
       </header>
 
       {step === 1 && (
@@ -65,6 +127,7 @@ export default function App() {
           projectName={projectName}
           network={network}
           setNetwork={setNetwork}
+          authToken={token}
           onNext={() => setStep(3)}
           onBack={() => setStep(1)}
         />
@@ -93,7 +156,7 @@ export default function App() {
             try {
               const res = await fetch('/api/generate', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
                 body: JSON.stringify({ config, format }),
               });
               if (!res.ok) {

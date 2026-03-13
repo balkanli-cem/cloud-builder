@@ -104,18 +104,24 @@ export function StepServices({
             const name = names[type] ?? `${projectName}-${type}`;
             return (
               <div key={type} style={{ marginBottom: '1rem' }}>
-                <div style={{ marginBottom: '0.25rem' }}>{entry?.label ?? type}</div>
+                <div style={{ marginBottom: '0.5rem', fontWeight: 600 }}>{entry?.label ?? type}</div>
+                <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem', color: '#94a3b8' }}>
+                  Resource name
+                </label>
                 <input
                   type="text"
                   value={names[type] ?? ''}
                   onChange={(e) => setNames((n) => ({ ...n, [type]: e.target.value }))}
-                  placeholder="Resource name"
+                  placeholder="e.g. my-app-vmss"
                   style={inputStyle}
                 />
+                <label style={{ display: 'block', marginTop: '0.5rem', marginBottom: '0.25rem', fontSize: '0.875rem', color: '#94a3b8' }}>
+                  Subnet
+                </label>
                 <select
                   value={subnets[type] ?? ''}
                   onChange={(e) => setSubnets((s) => ({ ...s, [type]: e.target.value }))}
-                  style={{ ...inputStyle, marginTop: '0.25rem' }}
+                  style={{ ...inputStyle }}
                 >
                   {subnetNames.map((sn) => (
                     <option key={sn} value={sn}>{sn}</option>
@@ -184,6 +190,7 @@ function VMConfigForm({
   name: string;
   onChange: (u: Partial<VMConfig>) => void;
 }) {
+  const labelStyle: React.CSSProperties = { display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem', color: '#94a3b8' };
   return (
     <div style={{ marginTop: '0.75rem', paddingLeft: '0.5rem', borderLeft: '2px solid #475569' }}>
       <div style={{ fontSize: '0.8125rem', color: '#94a3b8', marginBottom: '0.5rem' }}>VM options</div>
@@ -195,13 +202,15 @@ function VMConfigForm({
         />
         <span>Assign public IP</span>
       </label>
+      <label style={labelStyle}>NIC name</label>
       <input
         type="text"
         value={config.nicName ?? `${name}-nic`}
         onChange={(e) => onChange({ nicName: e.target.value })}
-        placeholder="NIC name"
+        placeholder="e.g. my-vm-nic"
         style={{ ...inputStyle, marginBottom: '0.5rem' }}
       />
+      <label style={labelStyle}>VM size (SKU)</label>
       <select
         value={config.vmSize ?? 'Standard_B2s'}
         onChange={(e) => onChange({ vmSize: e.target.value })}
@@ -211,6 +220,7 @@ function VMConfigForm({
           <option key={s} value={s}>{s}</option>
         ))}
       </select>
+      <label style={labelStyle}>Operating system</label>
       <select
         value={config.osType ?? 'Linux'}
         onChange={(e) => onChange({ osType: e.target.value as 'Linux' | 'Windows' })}
@@ -219,20 +229,22 @@ function VMConfigForm({
         <option value="Linux">Linux</option>
         <option value="Windows">Windows</option>
       </select>
+      <label style={labelStyle}>Admin username</label>
       <input
         type="text"
         value={config.adminUsername ?? 'azureuser'}
         onChange={(e) => onChange({ adminUsername: e.target.value })}
-        placeholder="Admin username"
+        placeholder="e.g. azureuser"
         style={{ ...inputStyle, marginBottom: '0.5rem' }}
       />
+      <label style={labelStyle}>OS disk size (GB)</label>
       <input
         type="number"
         min={1}
         max={4096}
         value={config.osDiskSizeGb ?? 30}
         onChange={(e) => onChange({ osDiskSizeGb: parseInt(e.target.value, 10) || 30 })}
-        placeholder="OS disk size (GB)"
+        placeholder="30"
         style={inputStyle}
       />
     </div>
@@ -248,16 +260,19 @@ function VMSSConfigForm({
   name: string;
   onChange: (u: Partial<VMSSConfig>) => void;
 }) {
+  const labelStyle: React.CSSProperties = { display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem', color: '#94a3b8' };
   return (
     <div style={{ marginTop: '0.75rem', paddingLeft: '0.5rem', borderLeft: '2px solid #475569' }}>
       <div style={{ fontSize: '0.8125rem', color: '#94a3b8', marginBottom: '0.5rem' }}>Scale set &amp; autoscale</div>
+      <label style={labelStyle}>NIC name (prefix)</label>
       <input
         type="text"
         value={config.nicName ?? `${name}-nic`}
         onChange={(e) => onChange({ nicName: e.target.value })}
-        placeholder="NIC name (prefix)"
+        placeholder="e.g. my-vmss-nic"
         style={{ ...inputStyle, marginBottom: '0.5rem' }}
       />
+      <label style={labelStyle}>VM size (SKU)</label>
       <select
         value={config.vmSize ?? 'Standard_B2s'}
         onChange={(e) => onChange({ vmSize: e.target.value })}
@@ -267,6 +282,7 @@ function VMSSConfigForm({
           <option key={s} value={s}>{s}</option>
         ))}
       </select>
+      <label style={labelStyle}>Operating system</label>
       <select
         value={config.osType ?? 'Linux'}
         onChange={(e) => onChange({ osType: e.target.value as 'Linux' | 'Windows' })}
@@ -275,23 +291,25 @@ function VMSSConfigForm({
         <option value="Linux">Linux</option>
         <option value="Windows">Windows</option>
       </select>
+      <label style={labelStyle}>Minimum instances</label>
       <input
         type="number"
         min={0}
         value={config.instanceCountMin ?? 1}
         onChange={(e) => onChange({ instanceCountMin: parseInt(e.target.value, 10) || 0 })}
-        placeholder="Min instances"
+        placeholder="1"
         style={{ ...inputStyle, marginBottom: '0.5rem' }}
       />
+      <label style={labelStyle}>Maximum instances</label>
       <input
         type="number"
         min={1}
         value={config.instanceCountMax ?? 10}
         onChange={(e) => onChange({ instanceCountMax: parseInt(e.target.value, 10) || 1 })}
-        placeholder="Max instances"
+        placeholder="10"
         style={{ ...inputStyle, marginBottom: '0.5rem' }}
       />
-      <div style={{ fontSize: '0.8125rem', color: '#94a3b8', marginTop: '0.5rem' }}>Scale out when CPU % above</div>
+      <label style={{ ...labelStyle, marginTop: '0.5rem' }}>Scale out when CPU % above</label>
       <input
         type="number"
         min={1}
@@ -300,7 +318,7 @@ function VMSSConfigForm({
         onChange={(e) => onChange({ scaleOutCpuPercent: parseInt(e.target.value, 10) || 70 })}
         style={{ ...inputStyle, marginBottom: '0.5rem' }}
       />
-      <div style={{ fontSize: '0.8125rem', color: '#94a3b8' }}>Scale in when CPU % below</div>
+      <label style={labelStyle}>Scale in when CPU % below</label>
       <input
         type="number"
         min={0}

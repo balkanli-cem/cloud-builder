@@ -40,3 +40,52 @@ export async function saveGeneration(config: ProjectConfig, format: 'bicep' | 't
     console.error('Failed to save generation to DB:', err);
   }
 }
+
+export interface UserRow {
+  Id: number;
+  Email: string;
+  PasswordHash: string;
+  DisplayName: string | null;
+}
+
+/**
+ * Finds a user by email. Returns null if DB not configured or user not found.
+ */
+export async function findUserByEmail(email: string): Promise<UserRow | null> {
+  const p = await getPool();
+  if (!p) return null;
+  try {
+    const result = await p.request()
+      .input('email', sql.NVarChar(256), email.trim().toLowerCase())
+      .query(`SELECT Id, Email, PasswordHash, DisplayName FROM dbo.Users WHERE Email = @email`);
+    const rows = (result as { recordset: UserRow[] }).recordset;
+    return rows[0] ?? null;
+  } catch (err) {
+    console.error('findUserByEmail:', err);
+    return null;
+  }
+}
+
+/**
+ * Creates a user with an already-hashed password. No-op if DB not configured.
+ */
+export async function createUser(email: string, passwordHash: string, displayName: string | null): Promise<number | null> {
+  const p = await getPool();
+  if (!p) return null;
+  try {
+    const result = await p.request()
+      .input('email', sql.NVarChar(256), email.trim().toLowerCase())
+      .input('passwordHash', sql.NVarChar(256), passwordHash)
+      .input('displayName', sql.NVarChar(128), displayName?.trim() || null)
+      .query(`
+        INSERT INTO dbo.Users (Email, PasswordHash, DisplayName)
+        OUTPUT INSERTED.Id
+        VALUES (@email, @passwordHash, @displayName)
+      `);
+    const rows = (result as { recordset: { Id: number }[] }).recordset;
+    return rows[0]?.Id ?? null;
+  } catch (err) {
+    console.error('createUser:', err);
+    return null;
+  }
+}

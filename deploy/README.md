@@ -37,7 +37,7 @@ Run the schema once against the new database (using Azure Data Studio, sqlcmd, o
 
 Execute the script: `deploy/terraform/sql/schema.sql`
 
-For a future login page, run `deploy/terraform/sql/users.sql` against the same database to create the **Users** table (Email, PasswordHash, DisplayName, etc.).
+For the **login page**, run `deploy/terraform/sql/users.sql` against the same database to create the **Users** table (Email, PasswordHash, DisplayName). Passwords are stored only as hashes (bcrypt). Set **JWT_SECRET** in the Web App application settings (or env) for production; otherwise a default dev secret is used.
 
 ## 3. Deploy the application
 

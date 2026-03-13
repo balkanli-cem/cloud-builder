@@ -9,6 +9,7 @@ import { generateTerraform } from './generators/terraform/index';
 import { buildDefaultNetwork } from './core/network/defaults';
 import { SERVICE_CATALOG } from './core/services/catalog';
 import { saveGeneration } from './db/client';
+import { register, login, verifyToken } from './auth';
 import type { ProjectConfig } from './types/index';
 
 const app = express();
@@ -18,21 +19,65 @@ app.use(express.json({ limit: '1mb' }));
 const PORT = process.env.PORT ?? 3000;
 const WEB_DIR = path.join(__dirname, '..', 'web-dist');
 
+function authMiddleware(req: express.Request, res: express.Response, next: express.NextFunction): void {
+  const auth = req.headers.authorization;
+  const token = auth?.startsWith('Bearer ') ? auth.slice(7) : null;
+  if (!token) {
+    res.status(401).json({ error: 'Authentication required.' });
+    return;
+  }
+  const payload = verifyToken(token);
+  if (!payload) {
+    res.status(401).json({ error: 'Invalid or expired token.' });
+    return;
+  }
+  (req as express.Request & { user: { email: string; userId: number } }).user = payload;
+  next();
+}
+
 // Serve built frontend (after npm run build:web)
 app.use(express.static(WEB_DIR));
 
-// Service catalog and defaults for the wizard
-app.get('/api/catalog', (_req, res) => {
+// Auth: register (hashed password stored in DB)
+app.post('/api/register', async (req, res) => {
+  const { email, password, displayName } = req.body as { email?: string; password?: string; displayName?: string };
+  const result = await register(email ?? '', password ?? '', displayName);
+  if (!result.ok) {
+    res.status(result.error.includes('already exists') ? 409 : 400).json({ error: result.error });
+    return;
+  }
+  res.status(201).json({ ok: true, userId: result.userId });
+});
+
+// Auth: login (returns JWT; password checked against hash)
+app.post('/api/login', async (req, res) => {
+  const { email, password } = req.body as { email?: string; password?: string };
+  const result = await login(email ?? '', password ?? '');
+  if (!result.ok) {
+    res.status(401).json({ error: result.error });
+    return;
+  }
+  res.json({ token: result.token, email: result.email });
+});
+
+// Auth: current user (requires valid JWT)
+app.get('/api/me', authMiddleware, (req, res) => {
+  const { user } = req as express.Request & { user: { email: string; userId: number } };
+  res.json({ email: user.email });
+});
+
+// Service catalog and defaults for the wizard (protected so wizard is behind login)
+app.get('/api/catalog', authMiddleware, (_req, res) => {
   res.json({ services: SERVICE_CATALOG });
 });
 
-app.get('/api/default-network/:projectName', (req, res) => {
+app.get('/api/default-network/:projectName', authMiddleware, (req, res) => {
   const network = buildDefaultNetwork(req.params.projectName || 'project');
   res.json(network);
 });
 
-// Generate IaC and return as ZIP
-app.post('/api/generate', async (req, res) => {
+// Generate IaC and return as ZIP (protected)
+app.post('/api/generate', authMiddleware, async (req, res) => {
   const { config, format } = req.body as { config: ProjectConfig; format: 'bicep' | 'terraform' };
   if (!config || !format || !config.projectName || !config.network || !Array.isArray(config.services)) {
     res.status(400).json({ error: 'Invalid request: config (projectName, network, services) and format (bicep|terraform) required.' });

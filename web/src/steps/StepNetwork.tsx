@@ -30,6 +30,7 @@ type Props = {
   projectName: string;
   network: NetworkConfig | null;
   setNetwork: (n: NetworkConfig) => void;
+  authToken?: string | null;
   onNext: () => void;
   onBack: () => void;
 };
@@ -40,7 +41,7 @@ const DEFAULT_SUBNETS: SubnetConfig[] = [
   { name: 'DB', addressPrefix: '10.50.3.0/24' },
 ];
 
-export function StepNetwork({ projectName, network, setNetwork, onNext, onBack }: Props) {
+export function StepNetwork({ projectName, network, setNetwork, authToken, onNext, onBack }: Props) {
   const [useDefaults, setUseDefaults] = useState(true);
   const [loaded, setLoaded] = useState<NetworkConfig | null>(null);
   const [editing, setEditing] = useState<NetworkConfig>({
@@ -52,7 +53,8 @@ export function StepNetwork({ projectName, network, setNetwork, onNext, onBack }
 
   useEffect(() => {
     if (!projectName) return;
-    fetch(`/api/default-network/${encodeURIComponent(projectName)}`)
+    const headers: HeadersInit = authToken ? { Authorization: `Bearer ${authToken}` } : {};
+    fetch(`/api/default-network/${encodeURIComponent(projectName)}`, { headers })
       .then((r) => r.json())
       .then((data: NetworkConfig) => {
         setLoaded(data);
