@@ -10,11 +10,30 @@ type Props = {
   config: ProjectConfig;
   generating: boolean;
   error: string | null;
+  downloadedFormats: ('bicep' | 'terraform')[];
   onGenerate: (format: 'bicep' | 'terraform') => void;
   onBack: () => void;
+  onBackToStart: () => void;
 };
 
-export function StepSummary({ config, generating, onGenerate, onBack }: Props) {
+export function StepSummary({
+  config,
+  generating,
+  downloadedFormats,
+  onGenerate,
+  onBack,
+  onBackToStart,
+}: Props) {
+  const bicepDownloaded = downloadedFormats.includes('bicep');
+  const terraformDownloaded = downloadedFormats.includes('terraform');
+  const otherFormat: 'bicep' | 'terraform' = bicepDownloaded ? 'terraform' : 'bicep';
+  const showDownloadOtherPrompt = downloadedFormats.length === 1;
+
+  const downloadButtonStyle = (downloaded: boolean): React.CSSProperties =>
+    downloaded
+      ? { ...primaryButton, opacity: 0.5, cursor: 'default', position: 'relative' as const }
+      : primaryButton;
+
   return (
     <section>
       <h2 style={{ fontSize: '1.125rem', marginBottom: '1rem' }}>Summary</h2>
@@ -33,22 +52,55 @@ export function StepSummary({ config, generating, onGenerate, onBack }: Props) {
       <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
         <button
           type="button"
-          onClick={() => onGenerate('bicep')}
-          disabled={generating}
-          style={primaryButton}
+          onClick={bicepDownloaded ? undefined : () => onGenerate('bicep')}
+          disabled={generating || bicepDownloaded}
+          style={downloadButtonStyle(bicepDownloaded)}
         >
-          {generating ? '…' : 'Download Bicep'}
+          {bicepDownloaded ? 'Downloaded Bicep' : generating ? '…' : 'Download Bicep'}
         </button>
         <button
           type="button"
-          onClick={() => onGenerate('terraform')}
-          disabled={generating}
-          style={primaryButton}
+          onClick={terraformDownloaded ? undefined : () => onGenerate('terraform')}
+          disabled={generating || terraformDownloaded}
+          style={downloadButtonStyle(terraformDownloaded)}
         >
-          {generating ? '…' : 'Download Terraform'}
+          {terraformDownloaded ? 'Downloaded Terraform' : generating ? '…' : 'Download Terraform'}
         </button>
       </div>
-      <button type="button" onClick={onBack} style={secondaryButton}>Back</button>
+
+      {showDownloadOtherPrompt && (
+        <div style={{ background: '#334155', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
+          <p style={{ margin: '0 0 0.75rem 0', color: '#e2e8f0' }}>Download the other format as well?</p>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={() => onGenerate(otherFormat)}
+              disabled={generating}
+              style={primaryButton}
+            >
+              {generating ? '…' : `Yes, download ${otherFormat}`}
+            </button>
+            <button type="button" onClick={onBackToStart} style={secondaryButton}>
+              No, back to start
+            </button>
+          </div>
+        </div>
+      )}
+
+      {downloadedFormats.length === 2 && (
+        <p style={{ color: '#94a3b8', marginBottom: '0.75rem', fontSize: '0.875rem' }}>
+          Both formats downloaded.
+        </p>
+      )}
+
+      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
+        <button type="button" onClick={onBack} style={secondaryButton}>Back</button>
+        {(downloadedFormats.length > 0) && (
+          <button type="button" onClick={onBackToStart} style={secondaryButton}>
+            Back to start
+          </button>
+        )}
+      </div>
     </section>
   );
 }

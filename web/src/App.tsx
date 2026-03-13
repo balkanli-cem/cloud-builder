@@ -21,6 +21,7 @@ export default function App() {
   const [catalog, setCatalog] = useState<ServiceEntry[]>([]);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [downloadedFormats, setDownloadedFormats] = useState<('bicep' | 'terraform')[]>([]);
 
   const fetchCatalog = useCallback(async () => {
     if (catalog.length > 0) return;
@@ -85,6 +86,7 @@ export default function App() {
           config={config}
           generating={generating}
           error={error}
+          downloadedFormats={downloadedFormats}
           onGenerate={async (format: 'bicep' | 'terraform') => {
             setError(null);
             setGenerating(true);
@@ -105,13 +107,21 @@ export default function App() {
               a.download = `${config.projectName}-${format}.zip`;
               a.click();
               URL.revokeObjectURL(url);
+              setDownloadedFormats((prev) => (prev.includes(format) ? prev : [...prev, format]));
             } catch (e) {
               setError(e instanceof Error ? e.message : 'Download failed');
             } finally {
               setGenerating(false);
             }
           }}
-          onBack={() => setStep(3)}
+          onBack={() => {
+            setStep(3);
+            setDownloadedFormats([]);
+          }}
+          onBackToStart={() => {
+            setStep(1);
+            setDownloadedFormats([]);
+          }}
         />
       )}
 
