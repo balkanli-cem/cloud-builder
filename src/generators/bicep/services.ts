@@ -10,6 +10,8 @@ export function renderServiceBicep(type: AzureServiceType): string {
     case 'key-vault':      return keyVault();
     case 'api-management': return apiManagement();
     case 'container-apps': return containerApps();
+    case 'vm':             return vm();
+    case 'vmss':           return vmss();
   }
 }
 
@@ -337,5 +339,196 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
 
 output containerAppId string = containerApp.id
 output fqdn string = containerApp.properties.configuration.ingress.fqdn
+`;
+}
+
+// ─── Virtual Machine ──────────────────────────────────────────────────────────
+
+function vm(): string {
+  return `param location string
+param name string
+param subnetId string
+param enablePublicIp bool = true
+param nicName string = '\${name}-nic'
+param vmSize string = 'Standard_B2s'
+param osType string = 'Linux'
+param adminUsername string = 'azureuser'
+param osDiskSizeGb int = 30
+
+@secure()
+param adminPasswordOrKey string
+
+resource nic 'Microsoft.Network/networkInterfaces@2024-01-01' = {
+  name: nicName
+  location: location
+  properties: {
+    ipConfigurations: [
+      {
+        name: 'ipconfig1'
+        properties: {
+          subnet: { id: subnetId }
+          privateIPAllocationMethod: 'Dynamic'
+          publicIPAddress: enablePublicIp ? { id: pip.id } : null
+        }
+      }
+    ]
+  }
+}
+
+resource pip 'Microsoft.Network/publicIPAddresses@2024-01-01' = if (enablePublicIp) {
+  name: '\${name}-pip'
+  location: location
+  properties: {
+    publicIPAllocationMethod: 'Static'
+    sku: { name: 'Standard' }
+  }
+}
+
+resource vm 'Microsoft.Compute/virtualMachines@2024-07-01' = {
+  name: name
+  location: location
+  properties: {
+    hardwareProfile: { vmSize: vmSize }
+    osProfile: {
+      computerName: name
+      adminUsername: adminUsername
+      adminPassword: osType == 'Windows' ? adminPasswordOrKey : null
+      linuxConfiguration: osType == 'Linux' ? {
+        disablePasswordAuthentication: true
+        ssh: { publicKeys: [{ path: '/home/\${adminUsername}/.ssh/authorized_keys', keyData: adminPasswordOrKey }] }
+      } : null
+      windowsConfiguration: osType == 'Windows' ? { provisionVMAgent: true } : null
+    }
+    storageProfile: {
+      osDisk: {
+        createOption: 'FromImage'
+        managedDisk: { storageAccountType: 'Premium_LRS' }
+        diskSizeGB: osDiskSizeGb
+      }
+      imageReference: osType == 'Linux' ? {
+        publisher: 'Canonical'
+        offer: '0001-com-ubuntu-server-jammy'
+        sku: '22_04-lts'
+        version: 'latest'
+      } : {
+        publisher: 'MicrosoftWindowsServer'
+        offer: 'WindowsServer'
+        sku: '2022-datacenter-azure-edition'
+        version: 'latest'
+      }
+    }
+    networkProfile: {
+      networkInterfaces: [{ id: nic.id }]
+    }
+  }
+}
+
+output vmId string = vm.id
+output privateIp string = nic.properties.ipConfigurations[0].properties.privateIPAddress ?? ''
+output publicIp string = enablePublicIp ? pip.properties.ipAddress ?? '' : ''
+`;
+}
+
+// ─── Virtual Machine Scale Set ───────────────────────────────────────────────
+
+function vmss(): string {
+  return `param location string
+param name string
+param subnetId string
+param nicName string = '\${name}-nic'
+param vmSize string = 'Standard_B2s'
+param osType string = 'Linux'
+param instanceCountMin int = 1
+param instanceCountMax int = 10
+param scaleOutCpuPercent int = 70
+param scaleInCpuPercent int = 30
+
+@secure()
+param adminPasswordOrKey string
+
+resource vmss 'Microsoft.Compute/virtualMachineScaleSets@2024-07-01' = {
+  name: name
+  location: location
+  sku: {
+    name: vmSize
+    tier: 'Standard'
+    capacity: instanceCountMin
+  }
+  properties: {
+    overprovision: false
+    upgradePolicy: { mode: 'Manual' }
+    virtualMachineProfile: {
+      osProfile: {
+        computerNamePrefix: take(name, 9)
+        adminUsername: 'azureuser'
+        adminPassword: osType == 'Windows' ? adminPasswordOrKey : null
+        linuxConfiguration: osType == 'Linux' ? {
+          disablePasswordAuthentication: true
+          ssh: { publicKeys: [{ path: '/home/azureuser/.ssh/authorized_keys', keyData: adminPasswordOrKey }] }
+        } : null
+        windowsConfiguration: osType == 'Windows' ? { provisionVMAgent: true } : null
+      }
+      storageProfile: {
+        osDisk: { createOption: 'FromImage', managedDisk: { storageAccountType: 'Premium_LRS' } }
+        imageReference: osType == 'Linux' ? {
+          publisher: 'Canonical'
+          offer: '0001-com-ubuntu-server-jammy'
+          sku: '22_04-lts'
+          version: 'latest'
+        } : {
+          publisher: 'MicrosoftWindowsServer'
+          offer: 'WindowsServer'
+          sku: '2022-datacenter-azure-edition'
+          version: 'latest'
+        }
+      }
+      networkProfile: {
+        networkInterfaceConfigurations: [
+          {
+            name: nicName
+            properties: {
+              primary: true
+              ipConfigurations: [
+                {
+                  name: 'ipconfig1'
+                  properties: {
+                    subnet: { id: subnetId }
+                    primary: true
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}
+
+resource autoscale 'Microsoft.Insights/autoscaleSettings@2022-10-01' = {
+  name: '\${name}-autoscale'
+  location: location
+  properties: {
+    targetResourceUri: vmss.id
+    profiles: [
+      {
+        name: 'Default'
+        capacity: { minimum: string(instanceCountMin), maximum: string(instanceCountMax), default: string(instanceCountMin) }
+        rules: [
+          {
+            scaleAction: { direction: 'Increase', type: 'ChangeCount', value: '1', cooldown: 'PT5M' }
+            metricTrigger: { metricName: 'Percentage CPU', metricResourceUri: vmss.id, timeGrain: 'PT1M', statistic: 'Average', timeWindow: 'PT5M', timeAggregation: 'Average', operator: 'GreaterThan', threshold: scaleOutCpuPercent }
+          }
+          {
+            scaleAction: { direction: 'Decrease', type: 'ChangeCount', value: '1', cooldown: 'PT5M' }
+            metricTrigger: { metricName: 'Percentage CPU', metricResourceUri: vmss.id, timeGrain: 'PT1M', statistic: 'Average', timeWindow: 'PT5M', timeAggregation: 'Average', operator: 'LessThan', threshold: scaleInCpuPercent }
+          }
+        ]
+      }
+    ]
+  }
+}
+
+output vmssId string = vmss.id
 `;
 }

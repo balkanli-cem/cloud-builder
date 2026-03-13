@@ -1,4 +1,4 @@
-import type { AzureService } from '../../types/index';
+import type { AzureService, VMConfig, VMSSConfig } from '../../types/index';
 import { toTfId } from './network';
 
 function getSubnetRef(svc: AzureService): string {
@@ -14,6 +14,7 @@ export function renderServiceTerraform(services: AzureService[]): string {
   const blocks = services.map(svc => {
     const id = toTfId(svc.name);
     const sub = getSubnetRef(svc);
+    const config = (svc.config || {}) as Record<string, unknown>;
     switch (type) {
       case 'app-service':     return appService(id, svc.name, sub);
       case 'aks':             return aks(id, svc.name, sub);
@@ -23,6 +24,8 @@ export function renderServiceTerraform(services: AzureService[]): string {
       case 'key-vault':       return keyVault(id, svc.name, sub);
       case 'api-management':  return apiManagement(id, svc.name, sub);
       case 'container-apps':  return containerApps(id, svc.name, sub);
+      case 'vm':              return vm(id, svc.name, sub, config as VMConfig);
+      case 'vmss':            return vmss(id, svc.name, sub, config as VMSSConfig);
     }
   });
   // Key Vault needs the client config data block once per file, not per instance
@@ -296,4 +299,323 @@ output "${id}_fqdn" {
   value = azurerm_container_app.${id}.ingress[0].fqdn
 }
 `;
+}
+
+// ─── Virtual Machine ──────────────────────────────────────────────────────────
+
+function vm(id: string, name: string, subnetRef: string, c: VMConfig): string {
+  const enablePublicIp = c.enablePublicIp !== false;
+  const nicName = c.nicName ?? `${name}-nic`;
+  const vmSize = c.vmSize ?? 'Standard_B2s';
+  const osType = (c.osType ?? 'Linux') as string;
+  const adminUsername = c.adminUsername ?? 'azureuser';
+  const osDiskSizeGb = c.osDiskSizeGb ?? 30;
+  const isLinux = osType === 'Linux';
+
+  const pipBlock = enablePublicIp
+    ? `
+resource "azurerm_public_ip" "${id}_pip" {
+  name                = "${name}-pip"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+  allocation_method   = "Static"
+  sku                 = "Standard"
+}
+`
+    : '';
+  const nicPublicIp = enablePublicIp ? `azurerm_public_ip.${id}_pip.id` : 'null';
+
+  const nicBlock = `
+resource "azurerm_network_interface" "${id}_nic" {
+  name                = "${nicName}"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+
+  ip_configuration {
+    name                          = "internal"
+    subnet_id                     = ${subnetRef}
+    private_ip_address_allocation = "Dynamic"
+    public_ip_address_id          = ${nicPublicIp}
+  }
+}
+`;
+
+  const linuxVmBlock = `
+resource "azurerm_linux_virtual_machine" "${id}" {
+  name                = "${name}"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+  size                = "${vmSize}"
+  admin_username      = "${adminUsername}"
+  network_interface_ids = [azurerm_network_interface.${id}_nic.id]
+
+  admin_ssh_key {
+    username   = "${adminUsername}"
+    public_key = var.admin_ssh_public_key
+  }
+
+  os_disk {
+    name                 = "${name}-osdisk"
+    caching              = "ReadWrite"
+    storage_account_type = "Premium_LRS"
+    disk_size_gb         = ${osDiskSizeGb}
+  }
+
+  source_image_reference {
+    publisher = "Canonical"
+    offer     = "0001-com-ubuntu-server-jammy"
+    sku       = "22_04-lts"
+    version   = "latest"
+  }
+}
+
+output "${id}_private_ip" {
+  value = azurerm_network_interface.${id}_nic.private_ip_address
+}
+output "${id}_public_ip" {
+  value = ${enablePublicIp ? `azurerm_public_ip.${id}_pip.ip_address` : 'null'}
+}
+`;
+
+  const windowsVmBlock = `
+resource "azurerm_windows_virtual_machine" "${id}" {
+  name                = "${name}"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+  size                = "${vmSize}"
+  admin_username      = "${adminUsername}"
+  admin_password     = var.admin_password
+  network_interface_ids = [azurerm_network_interface.${id}_nic.id]
+
+  os_disk {
+    name                 = "${name}-osdisk"
+    caching              = "ReadWrite"
+    storage_account_type = "Premium_LRS"
+    disk_size_gb         = ${osDiskSizeGb}
+  }
+
+  source_image_reference {
+    publisher = "MicrosoftWindowsServer"
+    offer     = "WindowsServer"
+    sku       = "2022-datacenter-azure-edition"
+    version   = "latest"
+  }
+}
+
+output "${id}_private_ip" {
+  value = azurerm_network_interface.${id}_nic.private_ip_address
+}
+output "${id}_public_ip" {
+  value = ${enablePublicIp ? `azurerm_public_ip.${id}_pip.ip_address` : 'null'}
+}
+`;
+
+  return pipBlock + nicBlock + (isLinux ? linuxVmBlock : windowsVmBlock);
+}
+
+// ─── Virtual Machine Scale Set ─────────────────────────────────────────────────
+
+function vmss(id: string, name: string, subnetRef: string, c: VMSSConfig): string {
+  const vmSize = c.vmSize ?? 'Standard_B2s';
+  const osType = (c.osType ?? 'Linux') as string;
+  const nicName = c.nicName ?? `${name}-nic`;
+  const instanceCountMin = c.instanceCountMin ?? 1;
+  const instanceCountMax = c.instanceCountMax ?? 10;
+  const scaleOutCpuPercent = c.scaleOutCpuPercent ?? 70;
+  const scaleInCpuPercent = c.scaleInCpuPercent ?? 30;
+  const isLinux = osType === 'Linux';
+
+  const linuxVmssBlock = `
+resource "azurerm_linux_virtual_machine_scale_set" "${id}" {
+  name                = "${name}"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+  sku                 = "${vmSize}"
+  instances           = ${instanceCountMin}
+  admin_username      = "azureuser"
+
+  admin_ssh_key {
+    username   = "azureuser"
+    public_key = var.admin_ssh_public_key
+  }
+
+  source_image_reference {
+    publisher = "Canonical"
+    offer     = "0001-com-ubuntu-server-jammy"
+    sku       = "22_04-lts"
+    version   = "latest"
+  }
+
+  os_disk {
+    storage_account_type = "Premium_LRS"
+    caching              = "ReadWrite"
+  }
+
+  network_interface {
+    name    = "${nicName}"
+    primary = true
+
+    ip_configuration {
+      name      = "internal"
+      primary   = true
+      subnet_id = ${subnetRef}
+    }
+  }
+}
+
+resource "azurerm_monitor_autoscale_setting" "${id}" {
+  name                = "${name}-autoscale"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+  target_resource_id  = azurerm_linux_virtual_machine_scale_set.${id}.id
+
+  profile {
+    name = "default"
+
+    capacity {
+      default = ${instanceCountMin}
+      minimum = ${instanceCountMin}
+      maximum = ${instanceCountMax}
+    }
+
+    rule {
+      metric_trigger {
+        metric_name         = "Percentage CPU"
+        metric_resource_id  = azurerm_linux_virtual_machine_scale_set.${id}.id
+        time_grain          = "PT1M"
+        statistic           = "Average"
+        time_window         = "PT5M"
+        time_aggregation    = "Average"
+        operator            = "GreaterThan"
+        threshold           = ${scaleOutCpuPercent}
+      }
+      scale_action {
+        direction = "Increase"
+        type      = "ChangeCount"
+        value     = "1"
+        cooldown  = "PT5M"
+      }
+    }
+
+    rule {
+      metric_trigger {
+        metric_name         = "Percentage CPU"
+        metric_resource_id  = azurerm_linux_virtual_machine_scale_set.${id}.id
+        time_grain          = "PT1M"
+        statistic           = "Average"
+        time_window         = "PT5M"
+        time_aggregation    = "Average"
+        operator            = "LessThan"
+        threshold           = ${scaleInCpuPercent}
+      }
+      scale_action {
+        direction = "Decrease"
+        type      = "ChangeCount"
+        value     = "1"
+        cooldown  = "PT5M"
+      }
+    }
+  }
+}
+
+output "${id}_vmss_id" {
+  value = azurerm_linux_virtual_machine_scale_set.${id}.id
+}
+`;
+
+  const windowsVmssBlock = `
+resource "azurerm_windows_virtual_machine_scale_set" "${id}" {
+  name                = "${name}"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+  sku                 = "${vmSize}"
+  instances           = ${instanceCountMin}
+  admin_username      = "azureuser"
+  admin_password      = var.admin_password
+
+  source_image_reference {
+    publisher = "MicrosoftWindowsServer"
+    offer     = "WindowsServer"
+    sku       = "2022-datacenter-azure-edition"
+    version   = "latest"
+  }
+
+  os_disk {
+    storage_account_type = "Premium_LRS"
+    caching              = "ReadWrite"
+  }
+
+  network_interface {
+    name    = "${nicName}"
+    primary = true
+
+    ip_configuration {
+      name      = "internal"
+      primary   = true
+      subnet_id = ${subnetRef}
+    }
+  }
+}
+
+resource "azurerm_monitor_autoscale_setting" "${id}" {
+  name                = "${name}-autoscale"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+  target_resource_id  = azurerm_windows_virtual_machine_scale_set.${id}.id
+
+  profile {
+    name = "default"
+
+    capacity {
+      default = ${instanceCountMin}
+      minimum = ${instanceCountMin}
+      maximum = ${instanceCountMax}
+    }
+
+    rule {
+      metric_trigger {
+        metric_name         = "Percentage CPU"
+        metric_resource_id  = azurerm_windows_virtual_machine_scale_set.${id}.id
+        time_grain          = "PT1M"
+        statistic           = "Average"
+        time_window         = "PT5M"
+        time_aggregation    = "Average"
+        operator            = "GreaterThan"
+        threshold           = ${scaleOutCpuPercent}
+      }
+      scale_action {
+        direction = "Increase"
+        type      = "ChangeCount"
+        value     = "1"
+        cooldown  = "PT5M"
+      }
+    }
+
+    rule {
+      metric_trigger {
+        metric_name         = "Percentage CPU"
+        metric_resource_id  = azurerm_windows_virtual_machine_scale_set.${id}.id
+        time_grain          = "PT1M"
+        statistic           = "Average"
+        time_window         = "PT5M"
+        time_aggregation    = "Average"
+        operator            = "LessThan"
+        threshold           = ${scaleInCpuPercent}
+      }
+      scale_action {
+        direction = "Decrease"
+        type      = "ChangeCount"
+        value     = "1"
+        cooldown  = "PT5M"
+      }
+    }
+  }
+}
+
+output "${id}_vmss_id" {
+  value = azurerm_windows_virtual_machine_scale_set.${id}.id
+}
+`;
+
+  return isLinux ? linuxVmssBlock : windowsVmssBlock;
 }

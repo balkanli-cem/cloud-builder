@@ -57,4 +57,16 @@ export const SERVICE_CATALOG: ServiceEntry[] = [
     description: 'Serverless containers with auto-scaling',
     defaultSubnet: 'Backend',
   },
+  {
+    type: 'vm',
+    label: 'Virtual Machine (VM)',
+    description: 'Single Linux or Windows VM with configurable NIC and public IP',
+    defaultSubnet: 'Backend',
+  },
+  {
+    type: 'vmss',
+    label: 'Virtual Machine Scale Set (VMSS)',
+    description: 'Auto-scaling set of VMs with horizontal scale rules',
+    defaultSubnet: 'Backend',
+  },
 ];

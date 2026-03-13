@@ -38,4 +38,53 @@ describe('renderServiceTerraform', () => {
     expect(out).toContain('kv-a');
     expect(out).toContain('kv-b');
   });
+
+  it('emits VM resources with config (public IP, NIC, Linux VM)', () => {
+    const services: AzureService[] = [
+      {
+        type: 'vm',
+        name: 'my-vm',
+        subnetPlacement: 'Backend',
+        config: {
+          enablePublicIp: true,
+          nicName: 'my-vm-nic',
+          vmSize: 'Standard_B2s',
+          osType: 'Linux',
+          adminUsername: 'azureuser',
+          osDiskSizeGb: 30,
+        },
+      },
+    ];
+    const out = renderServiceTerraform(services);
+    expect(out).toContain('azurerm_public_ip');
+    expect(out).toContain('azurerm_network_interface');
+    expect(out).toContain('azurerm_linux_virtual_machine');
+    expect(out).toContain('my-vm-nic');
+    expect(out).toContain('Standard_B2s');
+  });
+
+  it('emits VMSS with autoscale settings', () => {
+    const services: AzureService[] = [
+      {
+        type: 'vmss',
+        name: 'my-vmss',
+        subnetPlacement: 'Backend',
+        config: {
+          vmSize: 'Standard_B2s',
+          osType: 'Linux',
+          instanceCountMin: 2,
+          instanceCountMax: 20,
+          scaleOutCpuPercent: 75,
+          scaleInCpuPercent: 25,
+        },
+      },
+    ];
+    const out = renderServiceTerraform(services);
+    expect(out).toContain('azurerm_linux_virtual_machine_scale_set');
+    expect(out).toContain('azurerm_monitor_autoscale_setting');
+    expect(out).toContain('minimum = 2');
+    expect(out).toContain('maximum = 20');
+    expect(out).toContain('threshold           = 75');
+    expect(out).toContain('threshold           = 25');
+  });
 });

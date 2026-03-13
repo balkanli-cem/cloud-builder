@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { NetworkConfig, AzureService, ServiceEntry } from '../types';
+import type { NetworkConfig, AzureService, ServiceEntry, VMConfig, VMSSConfig } from '../types';
 
 type Props = {
   projectName: string;
@@ -25,6 +25,7 @@ export function StepServices({
   const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set());
   const [names, setNames] = useState<Record<string, string>>({});
   const [subnets, setSubnets] = useState<Record<string, string>>({});
+  const [configs, setConfigs] = useState<Record<string, Record<string, unknown>>>({});
 
   useEffect(() => {
     fetchCatalog();
@@ -44,17 +45,30 @@ export function StepServices({
         const defaultSub = subnetNames.includes(entry.defaultSubnet) ? entry.defaultSubnet : subnetNames[0];
         setSubnets((s) => ({ ...s, [type]: defaultSub }));
       }
+      if (type === 'vm' && !configs[type]) {
+        setConfigs((c) => ({ ...c, [type]: defaultVMConfig(`${projectName}-vm`) as Record<string, unknown> }));
+      }
+      if (type === 'vmss' && !configs[type]) {
+        setConfigs((c) => ({ ...c, [type]: defaultVMSSConfig(`${projectName}-vmss`) as Record<string, unknown> }));
+      }
     }
     setSelectedTypes(next);
   };
 
   const buildServices = (): AzureService[] =>
-    Array.from(selectedTypes).map((type) => ({
-      type: type as AzureService['type'],
-      name: names[type] || `${projectName}-${type}`,
-      subnetPlacement: subnets[type] || subnetNames[0],
-      config: {},
-    }));
+    Array.from(selectedTypes).map((type) => {
+      const name = names[type] || `${projectName}-${type}`;
+      const config: Record<string, unknown> =
+        type === 'vm' ? ((configs[type] as VMConfig) || defaultVMConfig(name)) as Record<string, unknown>
+        : type === 'vmss' ? ((configs[type] as VMSSConfig) || defaultVMSSConfig(name)) as Record<string, unknown>
+        : {};
+      return {
+        type: type as AzureService['type'],
+        name,
+        subnetPlacement: subnets[type] || subnetNames[0],
+        config,
+      };
+    });
 
   const handleNext = () => {
     setServices(buildServices());
@@ -87,8 +101,9 @@ export function StepServices({
           <strong style={{ display: 'block', marginBottom: '0.5rem' }}>Configure each</strong>
           {Array.from(selectedTypes).map((type) => {
             const entry = catalog.find((c) => c.type === type);
+            const name = names[type] ?? `${projectName}-${type}`;
             return (
-              <div key={type} style={{ marginBottom: '0.75rem' }}>
+              <div key={type} style={{ marginBottom: '1rem' }}>
                 <div style={{ marginBottom: '0.25rem' }}>{entry?.label ?? type}</div>
                 <input
                   type="text"
@@ -106,6 +121,20 @@ export function StepServices({
                     <option key={sn} value={sn}>{sn}</option>
                   ))}
                 </select>
+                {type === 'vm' && (
+                  <VMConfigForm
+                    config={(configs[type] as VMConfig) || defaultVMConfig(name)}
+                    name={name}
+                    onChange={(updates) => setConfigs((c) => ({ ...c, [type]: { ...(c[type] as VMConfig), ...updates } }))}
+                  />
+                )}
+                {type === 'vmss' && (
+                  <VMSSConfigForm
+                    config={(configs[type] as VMSSConfig) || defaultVMSSConfig(name)}
+                    name={name}
+                    onChange={(updates) => setConfigs((c) => ({ ...c, [type]: { ...(c[type] as VMSSConfig), ...updates } }))}
+                  />
+                )}
               </div>
             );
           })}
@@ -118,6 +147,169 @@ export function StepServices({
         </button>
       </div>
     </section>
+  );
+}
+
+function defaultVMConfig(name: string): VMConfig {
+  return {
+    enablePublicIp: true,
+    nicName: `${name}-nic`,
+    vmSize: 'Standard_B2s',
+    osType: 'Linux',
+    adminUsername: 'azureuser',
+    osDiskSizeGb: 30,
+  };
+}
+
+function defaultVMSSConfig(name: string): VMSSConfig {
+  return {
+    nicName: `${name}-nic`,
+    vmSize: 'Standard_B2s',
+    osType: 'Linux',
+    instanceCountMin: 1,
+    instanceCountMax: 10,
+    scaleOutCpuPercent: 70,
+    scaleInCpuPercent: 30,
+  };
+}
+
+const VM_SIZES = ['Standard_B1s', 'Standard_B2s', 'Standard_D2s_v3', 'Standard_D4s_v3', 'Standard_DS2_v2'];
+
+function VMConfigForm({
+  config,
+  name,
+  onChange,
+}: {
+  config: VMConfig;
+  name: string;
+  onChange: (u: Partial<VMConfig>) => void;
+}) {
+  return (
+    <div style={{ marginTop: '0.75rem', paddingLeft: '0.5rem', borderLeft: '2px solid #475569' }}>
+      <div style={{ fontSize: '0.8125rem', color: '#94a3b8', marginBottom: '0.5rem' }}>VM options</div>
+      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+        <input
+          type="checkbox"
+          checked={config.enablePublicIp !== false}
+          onChange={(e) => onChange({ enablePublicIp: e.target.checked })}
+        />
+        <span>Assign public IP</span>
+      </label>
+      <input
+        type="text"
+        value={config.nicName ?? `${name}-nic`}
+        onChange={(e) => onChange({ nicName: e.target.value })}
+        placeholder="NIC name"
+        style={{ ...inputStyle, marginBottom: '0.5rem' }}
+      />
+      <select
+        value={config.vmSize ?? 'Standard_B2s'}
+        onChange={(e) => onChange({ vmSize: e.target.value })}
+        style={{ ...inputStyle, marginBottom: '0.5rem' }}
+      >
+        {VM_SIZES.map((s) => (
+          <option key={s} value={s}>{s}</option>
+        ))}
+      </select>
+      <select
+        value={config.osType ?? 'Linux'}
+        onChange={(e) => onChange({ osType: e.target.value as 'Linux' | 'Windows' })}
+        style={{ ...inputStyle, marginBottom: '0.5rem' }}
+      >
+        <option value="Linux">Linux</option>
+        <option value="Windows">Windows</option>
+      </select>
+      <input
+        type="text"
+        value={config.adminUsername ?? 'azureuser'}
+        onChange={(e) => onChange({ adminUsername: e.target.value })}
+        placeholder="Admin username"
+        style={{ ...inputStyle, marginBottom: '0.5rem' }}
+      />
+      <input
+        type="number"
+        min={1}
+        max={4096}
+        value={config.osDiskSizeGb ?? 30}
+        onChange={(e) => onChange({ osDiskSizeGb: parseInt(e.target.value, 10) || 30 })}
+        placeholder="OS disk size (GB)"
+        style={inputStyle}
+      />
+    </div>
+  );
+}
+
+function VMSSConfigForm({
+  config,
+  name,
+  onChange,
+}: {
+  config: VMSSConfig;
+  name: string;
+  onChange: (u: Partial<VMSSConfig>) => void;
+}) {
+  return (
+    <div style={{ marginTop: '0.75rem', paddingLeft: '0.5rem', borderLeft: '2px solid #475569' }}>
+      <div style={{ fontSize: '0.8125rem', color: '#94a3b8', marginBottom: '0.5rem' }}>Scale set &amp; autoscale</div>
+      <input
+        type="text"
+        value={config.nicName ?? `${name}-nic`}
+        onChange={(e) => onChange({ nicName: e.target.value })}
+        placeholder="NIC name (prefix)"
+        style={{ ...inputStyle, marginBottom: '0.5rem' }}
+      />
+      <select
+        value={config.vmSize ?? 'Standard_B2s'}
+        onChange={(e) => onChange({ vmSize: e.target.value })}
+        style={{ ...inputStyle, marginBottom: '0.5rem' }}
+      >
+        {VM_SIZES.map((s) => (
+          <option key={s} value={s}>{s}</option>
+        ))}
+      </select>
+      <select
+        value={config.osType ?? 'Linux'}
+        onChange={(e) => onChange({ osType: e.target.value as 'Linux' | 'Windows' })}
+        style={{ ...inputStyle, marginBottom: '0.5rem' }}
+      >
+        <option value="Linux">Linux</option>
+        <option value="Windows">Windows</option>
+      </select>
+      <input
+        type="number"
+        min={0}
+        value={config.instanceCountMin ?? 1}
+        onChange={(e) => onChange({ instanceCountMin: parseInt(e.target.value, 10) || 0 })}
+        placeholder="Min instances"
+        style={{ ...inputStyle, marginBottom: '0.5rem' }}
+      />
+      <input
+        type="number"
+        min={1}
+        value={config.instanceCountMax ?? 10}
+        onChange={(e) => onChange({ instanceCountMax: parseInt(e.target.value, 10) || 1 })}
+        placeholder="Max instances"
+        style={{ ...inputStyle, marginBottom: '0.5rem' }}
+      />
+      <div style={{ fontSize: '0.8125rem', color: '#94a3b8', marginTop: '0.5rem' }}>Scale out when CPU % above</div>
+      <input
+        type="number"
+        min={1}
+        max={100}
+        value={config.scaleOutCpuPercent ?? 70}
+        onChange={(e) => onChange({ scaleOutCpuPercent: parseInt(e.target.value, 10) || 70 })}
+        style={{ ...inputStyle, marginBottom: '0.5rem' }}
+      />
+      <div style={{ fontSize: '0.8125rem', color: '#94a3b8' }}>Scale in when CPU % below</div>
+      <input
+        type="number"
+        min={0}
+        max={100}
+        value={config.scaleInCpuPercent ?? 30}
+        onChange={(e) => onChange({ scaleInCpuPercent: parseInt(e.target.value, 10) || 30 })}
+        style={inputStyle}
+      />
+    </div>
   );
 }
 

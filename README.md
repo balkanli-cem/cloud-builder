@@ -63,6 +63,8 @@ Open **http://localhost:3000**. Complete the steps and download Bicep or Terrafo
 - Key Vault  
 - API Management  
 - Container Apps  
+- **Virtual Machine (VM)** — Optional public IP, NIC name, VM size, OS (Linux/Windows), admin username, OS disk size.  
+- **Virtual Machine Scale Set (VMSS)** — NIC name prefix, VM size, OS, min/max instances, and horizontal autoscale: scale-out when CPU % above a threshold, scale-in when CPU % below a threshold.  
 
 ## Output layout
 

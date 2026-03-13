@@ -36,6 +36,24 @@ resource "azurerm_resource_group" "main" {
 }
 
 export function renderVariablesTf(config: ProjectConfig): string {
+  const hasVmOrVmss = config.services.some(s => s.type === 'vm' || s.type === 'vmss');
+  const vmVariables = hasVmOrVmss
+    ? `
+variable "admin_ssh_public_key" {
+  description = "SSH public key for Linux VMs and VMSS (e.g. contents of ~/.ssh/id_rsa.pub)."
+  type        = string
+  sensitive   = true
+}
+
+variable "admin_password" {
+  description = "Admin password for Windows VMs and VMSS. Only required if you deploy Windows."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+`
+    : '';
+
   return `variable "location" {
   description = "Azure region for all resources."
   type        = string
@@ -47,6 +65,7 @@ variable "resource_group_name" {
   type        = string
   default     = "${config.resourceGroupName}"
 }
+${vmVariables}
 `;
 }
 

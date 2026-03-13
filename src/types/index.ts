@@ -31,7 +31,31 @@ export type AzureServiceType =
   | 'storage-account'
   | 'key-vault'
   | 'api-management'
-  | 'container-apps';
+  | 'container-apps'
+  | 'vm'
+  | 'vmss';
+
+/** Options when type is 'vm' */
+export interface VMConfig {
+  enablePublicIp?: boolean;
+  nicName?: string;
+  vmSize?: string;
+  osType?: 'Linux' | 'Windows';
+  adminUsername?: string;
+  osDiskSizeGb?: number;
+}
+
+/** Options when type is 'vmss' */
+export interface VMSSConfig {
+  enablePublicIp?: boolean;
+  nicName?: string;
+  vmSize?: string;
+  osType?: 'Linux' | 'Windows';
+  instanceCountMin?: number;
+  instanceCountMax?: number;
+  scaleOutCpuPercent?: number;
+  scaleInCpuPercent?: number;
+}
 
 export interface AzureService {
   type: AzureServiceType;
