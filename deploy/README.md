@@ -37,6 +37,8 @@ Run the schema once against the new database (using Azure Data Studio, sqlcmd, o
 
 Execute the script: `deploy/terraform/sql/schema.sql`
 
+For a future login page, run `deploy/terraform/sql/users.sql` against the same database to create the **Users** table (Email, PasswordHash, DisplayName, etc.).
+
 ## 3. Deploy the application
 
 From the repo root:

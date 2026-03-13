@@ -7,6 +7,21 @@ const NAME_REGEX = /^[a-z0-9-]+$/;
 function validateCIDR(value: string): boolean {
   return CIDR_REGEX.test(value);
 }
+
+/** Derive subnet /24 prefixes from a VNet CIDR (e.g. 10.80.0.0/16 → 10.80.1.0/24, 10.80.2.0/24, ...). */
+function deriveSubnetPrefixesFromVnet(vnetCidr: string, count: number): string[] {
+  const trimmed = vnetCidr.trim();
+  if (!trimmed || !validateCIDR(trimmed)) return [];
+  const [ip] = trimmed.split('/');
+  const octets = ip.split('.').map((s) => parseInt(s, 10));
+  if (octets.length < 2 || octets.some((n) => Number.isNaN(n) || n < 0 || n > 255)) return [];
+  const base = `${octets[0]}.${octets[1]}`;
+  const prefixes: string[] = [];
+  for (let i = 1; i <= count; i++) {
+    prefixes.push(`${base}.${i}.0/24`);
+  }
+  return prefixes;
+}
 function validateName(value: string): boolean {
   return NAME_REGEX.test(value) && value.trim().length > 0;
 }
@@ -102,7 +117,14 @@ export function StepNetwork({ projectName, network, setNetwork, onNext, onBack }
     if (errors.vnetName) setErrors((e) => ({ ...e, vnetName: undefined }));
   };
   const updateAddressSpace = (addressSpace: string) => {
-    setEditing((prev) => ({ ...prev, addressSpace }));
+    setEditing((prev) => {
+      const next = { ...prev, addressSpace };
+      const derived = deriveSubnetPrefixesFromVnet(addressSpace, prev.subnets.length);
+      if (derived.length === prev.subnets.length) {
+        next.subnets = prev.subnets.map((s, i) => ({ ...s, addressPrefix: derived[i] }));
+      }
+      return next;
+    });
     if (errors.addressSpace) setErrors((e) => ({ ...e, addressSpace: undefined }));
   };
 

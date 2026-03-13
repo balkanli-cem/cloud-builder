@@ -120,6 +120,12 @@ export default function App() {
           }}
           onBackToStart={() => {
             setStep(1);
+            setProjectName('');
+            setResourceGroupName('');
+            setRegion('westeurope');
+            setNetwork(null);
+            setServices([]);
+            setError(null);
             setDownloadedFormats([]);
           }}
         />
