@@ -8,7 +8,7 @@ import { generateBicep } from './generators/bicep/index';
 import { generateTerraform } from './generators/terraform/index';
 import { buildDefaultNetwork } from './core/network/defaults';
 import { SERVICE_CATALOG } from './core/services/catalog';
-import { saveGeneration } from './db/client';
+import { saveGeneration, getGenerationsByUserId } from './db/client';
 import { register, login, verifyToken } from './auth';
 import type { ProjectConfig } from './types/index';
 
@@ -66,6 +66,26 @@ app.get('/api/me', authMiddleware, (req, res) => {
   res.json({ email: user.email });
 });
 
+// List generations for the current user (for "My generations" dashboard)
+app.get('/api/generations', authMiddleware, async (req, res) => {
+  const { user } = req as express.Request & { user: { email: string; userId: number } };
+  try {
+    const list = await getGenerationsByUserId(user.userId);
+    const generations = list.map((g) => ({
+      id: g.Id,
+      projectName: g.ProjectName,
+      resourceGroupName: g.ResourceGroupName,
+      region: g.Region,
+      format: g.Format,
+      createdAt: g.CreatedAt,
+    }));
+    res.json({ generations });
+  } catch (err) {
+    console.error('GET /api/generations:', err);
+    res.status(500).json({ error: 'Failed to load generations.' });
+  }
+});
+
 // Service catalog and defaults for the wizard (protected so wizard is behind login)
 app.get('/api/catalog', authMiddleware, (_req, res) => {
   res.json({ services: SERVICE_CATALOG });
@@ -97,8 +117,9 @@ app.post('/api/generate', authMiddleware, async (req, res) => {
       await generateTerraform(config, tempDir);
     }
 
-    // Persist generation details to Azure SQL when connection string is set
-    saveGeneration(config, format).catch((err) => console.error('DB save:', err));
+    // Persist generation details to Azure SQL when connection string is set (linked to user)
+    const { user } = req as express.Request & { user: { email: string; userId: number } };
+    saveGeneration(config, format, user.userId).catch((err) => console.error('DB save:', err));
 
     const archive = archiver('zip', { zlib: { level: 6 } });
     res.attachment(`${config.projectName}-${format}.zip`);

@@ -8,6 +8,7 @@ declare module 'mssql' {
     query(command: string): Promise<unknown>;
   }
   export const MAX: number;
+  export const Int: unknown;
   export function NVarChar(length?: number): unknown;
   export function connect(connectionString: string): Promise<ConnectionPool>;
 }

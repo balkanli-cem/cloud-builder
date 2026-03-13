@@ -17,27 +17,72 @@ async function getPool(): Promise<sql.ConnectionPool | null> {
   }
 }
 
+export interface GenerationRow {
+  Id: number;
+  ProjectName: string;
+  ResourceGroupName: string;
+  Region: string;
+  Format: string;
+  CreatedAt: Date;
+}
+
 /**
  * Saves a generation record to Azure SQL. No-op if AZURE_SQL_CONNECTION_STRING is not set.
+ * userId is set when the user is logged in so generations appear in "My generations".
  */
-export async function saveGeneration(config: ProjectConfig, format: 'bicep' | 'terraform'): Promise<void> {
+export async function saveGeneration(
+  config: ProjectConfig,
+  format: 'bicep' | 'terraform',
+  userId?: number | null,
+): Promise<void> {
   const p = await getPool();
   if (!p) return;
 
   try {
-    await p.request()
+    const req = p.request()
       .input('projectName', sql.NVarChar(256), config.projectName)
       .input('resourceGroupName', sql.NVarChar(256), config.resourceGroupName)
       .input('region', sql.NVarChar(64), config.region)
       .input('networkJson', sql.NVarChar(sql.MAX as number), JSON.stringify(config.network))
       .input('servicesJson', sql.NVarChar(sql.MAX as number), JSON.stringify(config.services))
-      .input('format', sql.NVarChar(32), format)
-      .query(`
+      .input('format', sql.NVarChar(32), format);
+    if (userId != null) {
+      req.input('userId', sql.Int, userId);
+      await req.query(`
+        INSERT INTO dbo.Generations (UserId, ProjectName, ResourceGroupName, Region, NetworkJson, ServicesJson, Format)
+        VALUES (@userId, @projectName, @resourceGroupName, @region, @networkJson, @servicesJson, @format)
+      `);
+    } else {
+      await req.query(`
         INSERT INTO dbo.Generations (ProjectName, ResourceGroupName, Region, NetworkJson, ServicesJson, Format)
         VALUES (@projectName, @resourceGroupName, @region, @networkJson, @servicesJson, @format)
       `);
+    }
   } catch (err) {
     console.error('Failed to save generation to DB:', err);
+  }
+}
+
+/**
+ * Returns generations for a user (for "My generations" list). Empty array if DB not configured.
+ */
+export async function getGenerationsByUserId(userId: number): Promise<GenerationRow[]> {
+  const p = await getPool();
+  if (!p) return [];
+  try {
+    const result = await p.request()
+      .input('userId', sql.Int, userId)
+      .query(`
+        SELECT Id, ProjectName, ResourceGroupName, Region, Format, CreatedAt
+        FROM dbo.Generations
+        WHERE UserId = @userId
+        ORDER BY CreatedAt DESC
+      `);
+    const rows = (result as { recordset: GenerationRow[] }).recordset;
+    return rows ?? [];
+  } catch (err) {
+    console.error('getGenerationsByUserId:', err);
+    return [];
   }
 }
 

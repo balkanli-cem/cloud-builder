@@ -27,17 +27,17 @@ terraform apply
 
 After apply, note the outputs: `web_app_url`, `web_app_name`, `sql_server_fqdn`, `sql_database_name`.
 
-## 2. Create the database table
+## 2. Create the database tables
 
-Run the schema once against the new database (using Azure Data Studio, sqlcmd, or the Azure Portal query editor):
+Run the scripts once against the new database (using Azure Data Studio, sqlcmd, or the Azure Portal query editor):
 
 - **Server:** value of `sql_server_fqdn` (e.g. `cloudbuilderprodsql.database.windows.net`)
 - **Database:** `cloudbuilder`
 - **Auth:** SQL login (the `sql_admin_login` / `sql_admin_password` from Terraform)
 
-Execute the script: `deploy/terraform/sql/schema.sql`
+**Order matters:** run **`users.sql`** first (creates the Users table for login; passwords stored as bcrypt hashes). Then run **`schema.sql`** (creates the Generations table and links it to Users for "My generations"). Set **JWT_SECRET** in the Web App application settings for production.
 
-For the **login page**, run `deploy/terraform/sql/users.sql` against the same database to create the **Users** table (Email, PasswordHash, DisplayName). Passwords are stored only as hashes (bcrypt). Set **JWT_SECRET** in the Web App application settings (or env) for production; otherwise a default dev secret is used.
+If you already had a Generations table without a user link, run **`schema-add-user-id.sql`** to add the `UserId` column and FK.
 
 ## 3. Deploy the application
 

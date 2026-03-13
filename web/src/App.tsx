@@ -6,6 +6,7 @@ import { StepServices } from './steps/StepServices';
 import { StepSummary } from './steps/StepSummary';
 import { Login } from './steps/Login';
 import { Register } from './steps/Register';
+import { Dashboard } from './steps/Dashboard';
 
 const AUTH_TOKEN_KEY = 'cloud-builder-token';
 
@@ -21,6 +22,7 @@ function authHeaders(token: string): HeadersInit {
 
 export default function App() {
   const [token, setTokenState] = useState<string | null>(() => localStorage.getItem(AUTH_TOKEN_KEY));
+  const [view, setView] = useState<'dashboard' | 'wizard'>('dashboard');
   const [showRegister, setShowRegister] = useState(false);
   const [step, setStep] = useState(1);
   const [projectName, setProjectName] = useState('');
@@ -40,6 +42,19 @@ export default function App() {
   const logout = useCallback(() => {
     setTokenState(null);
     localStorage.removeItem(AUTH_TOKEN_KEY);
+    setView('dashboard');
+  }, []);
+
+  const goToDashboard = useCallback(() => {
+    setView('dashboard');
+    setStep(1);
+    setProjectName('');
+    setResourceGroupName('');
+    setRegion('westeurope');
+    setNetwork(null);
+    setServices([]);
+    setError(null);
+    setDownloadedFormats([]);
   }, []);
 
   useEffect(() => {
@@ -87,11 +102,56 @@ export default function App() {
     );
   }
 
+  if (token && view === 'dashboard') {
+    return (
+      <>
+        <header style={{ marginBottom: '2rem', textAlign: 'center' }}>
+          <h1 style={{ fontSize: '1.75rem', fontWeight: 700, margin: 0 }}>Cloud Builder</h1>
+          <p style={{ color: '#94a3b8', marginTop: '0.25rem' }}>Azure infrastructure wizard</p>
+          <button
+            type="button"
+            onClick={logout}
+            style={{
+              marginTop: '0.5rem',
+              padding: '0.25rem 0.5rem',
+              background: 'transparent',
+              border: '1px solid #475569',
+              borderRadius: '4px',
+              color: '#94a3b8',
+              fontSize: '0.8125rem',
+              cursor: 'pointer',
+            }}
+          >
+            Sign out
+          </button>
+        </header>
+        <Dashboard token={token} onGenerateNew={() => setView('wizard')} />
+      </>
+    );
+  }
+
   return (
     <>
       <header style={{ marginBottom: '2rem', textAlign: 'center' }}>
         <h1 style={{ fontSize: '1.75rem', fontWeight: 700, margin: 0 }}>Cloud Builder</h1>
         <p style={{ color: '#94a3b8', marginTop: '0.25rem' }}>Azure infrastructure wizard</p>
+        <button
+          type="button"
+          onClick={goToDashboard}
+          style={{
+            marginTop: '0.5rem',
+            marginRight: '0.5rem',
+            padding: '0.25rem 0.5rem',
+            background: 'transparent',
+            border: '1px solid #475569',
+            borderRadius: '4px',
+            color: '#94a3b8',
+            fontSize: '0.8125rem',
+            cursor: 'pointer',
+          }}
+        >
+          My generations
+        </button>
         <button
           type="button"
           onClick={logout}
@@ -181,16 +241,7 @@ export default function App() {
             setStep(3);
             setDownloadedFormats([]);
           }}
-          onBackToStart={() => {
-            setStep(1);
-            setProjectName('');
-            setResourceGroupName('');
-            setRegion('westeurope');
-            setNetwork(null);
-            setServices([]);
-            setError(null);
-            setDownloadedFormats([]);
-          }}
+          onBackToStart={() => goToDashboard()}
         />
       )}
 
