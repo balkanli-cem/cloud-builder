@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import rateLimit from 'express-rate-limit';
 import path from 'path';
 import fs from 'fs/promises';
 import os from 'os';
@@ -13,11 +14,37 @@ import { register, login, verifyToken } from './auth';
 import type { ProjectConfig } from './types/index';
 
 const app = express();
+app.set('trust proxy', 1); // so req.ip is the client IP when behind Azure/nginx
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 
 const PORT = process.env.PORT ?? 3000;
 const WEB_DIR = path.join(__dirname, '..', 'web-dist');
+
+// ─── Rate limiting ───────────────────────────────────────────────────────────
+// Limits how many requests a client (by IP) can make in a time window. Prevents
+// brute-force (login/register) and abuse (generate). Each limiter counts per IP.
+// When the limit is exceeded, the client gets HTTP 429 and must wait for the window to reset.
+
+const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+
+/** Auth: strict limit to slow down brute-force and credential stuffing. */
+const authLimiter = rateLimit({
+  windowMs: WINDOW_MS,
+  max: 10,
+  message: { error: 'Too many attempts. Please try again later.' },
+  standardHeaders: true,  // X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset
+  legacyHeaders: false,
+});
+
+/** Generate: cap heavy requests per IP so one client cannot overload the server. */
+const generateLimiter = rateLimit({
+  windowMs: WINDOW_MS,
+  max: 30,
+  message: { error: 'Too many generations. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 function authMiddleware(req: express.Request, res: express.Response, next: express.NextFunction): void {
   const auth = req.headers.authorization;
@@ -52,8 +79,8 @@ app.get('/api/health/ready', async (_req, res) => {
   res.status(200).json({ status: 'ok', database: db.configured ? 'connected' : 'not_configured' });
 });
 
-// Auth: register (hashed password stored in DB)
-app.post('/api/register', async (req, res) => {
+// Auth: register (hashed password stored in DB) — rate limited
+app.post('/api/register', authLimiter, async (req, res) => {
   const { email, password, displayName } = req.body as { email?: string; password?: string; displayName?: string };
   const result = await register(email ?? '', password ?? '', displayName);
   if (!result.ok) {
@@ -63,8 +90,8 @@ app.post('/api/register', async (req, res) => {
   res.status(201).json({ ok: true, userId: result.userId });
 });
 
-// Auth: login (returns JWT; password checked against hash)
-app.post('/api/login', async (req, res) => {
+// Auth: login (returns JWT; password checked against hash) — rate limited
+app.post('/api/login', authLimiter, async (req, res) => {
   const { email, password } = req.body as { email?: string; password?: string };
   const result = await login(email ?? '', password ?? '');
   if (!result.ok) {
@@ -110,8 +137,8 @@ app.get('/api/default-network/:projectName', authMiddleware, (req, res) => {
   res.json(network);
 });
 
-// Generate IaC and return as ZIP (protected)
-app.post('/api/generate', authMiddleware, async (req, res) => {
+// Generate IaC and return as ZIP (protected, rate limited)
+app.post('/api/generate', generateLimiter, authMiddleware, async (req, res) => {
   const { config, format } = req.body as { config: ProjectConfig; format: 'bicep' | 'terraform' };
   if (!config || !format || !config.projectName || !config.network || !Array.isArray(config.services)) {
     res.status(400).json({ error: 'Invalid request: config (projectName, network, services) and format (bicep|terraform) required.' });

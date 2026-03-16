@@ -11,3 +11,4 @@ deploy/terraform/*.tfstate
 deploy/terraform/*.tfstate.backup
 deploy/terraform/.terraform.lock.hcl
 deploy/terraform/terraform.tfvars
+docs/RATE_LIMITING.md

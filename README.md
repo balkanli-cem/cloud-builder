@@ -75,6 +75,8 @@ Open **http://localhost:3000**. Complete the steps and download Bicep or Terrafo
 
 Tests live under `tests/` and use Jest (see `jest.config.js`). Run with `npm test`. CI runs on every push and pull request to `main` (see `.github/workflows/ci.yml`).
 
+**Rate limiting:** Login, register, and generate are rate-limited per IP (see **[docs/RATE_LIMITING.md](docs/RATE_LIMITING.md)** for how it works and how to tune it).
+
 ## Deploy to Azure
 
 Terraform in **[deploy/terraform/](deploy/terraform/)** provisions the Web App (Node 20) and an Azure SQL database. The app uses the connection string from app settings to store generation history. Step-by-step and CI/CD setup are in **[deploy/README.md](deploy/README.md)**.
