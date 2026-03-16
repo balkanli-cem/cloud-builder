@@ -71,6 +71,25 @@ export async function getGenerationByIdAndUserId(id: number, userId: number): Pr
 }
 
 /**
+ * Deletes a generation only if it belongs to the given user. Returns true if a row was deleted.
+ */
+export async function deleteGenerationByIdAndUserId(id: number, userId: number): Promise<boolean> {
+  const p = await getPool();
+  if (!p) return false;
+  try {
+    const result = await p.request()
+      .input('id', sql.Int, id)
+      .input('userId', sql.Int, userId)
+      .query(`DELETE FROM dbo.Generations WHERE Id = @id AND UserId = @userId`);
+    const affected = (result as { rowsAffected: number[] }).rowsAffected;
+    return Array.isArray(affected) && affected[0] > 0;
+  } catch (err) {
+    console.error('deleteGenerationByIdAndUserId:', err);
+    return false;
+  }
+}
+
+/**
  * Saves a generation record to Azure SQL. No-op if AZURE_SQL_CONNECTION_STRING is not set.
  * userId is set when the user is logged in so generations appear in "My generations".
  */

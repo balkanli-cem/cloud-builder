@@ -9,7 +9,7 @@ import { generateBicep } from './generators/bicep/index';
 import { generateTerraform } from './generators/terraform/index';
 import { buildDefaultNetwork } from './core/network/defaults';
 import { SERVICE_CATALOG } from './core/services/catalog';
-import { saveGeneration, getGenerationsByUserId, getGenerationByIdAndUserId, checkDatabase } from './db/client';
+import { saveGeneration, getGenerationsByUserId, getGenerationByIdAndUserId, deleteGenerationByIdAndUserId, checkDatabase } from './db/client';
 import { register, login, verifyToken } from './auth';
 import type { ProjectConfig } from './types/index';
 
@@ -125,6 +125,22 @@ app.get('/api/generations', authMiddleware, async (req, res) => {
     console.error('GET /api/generations:', err);
     res.status(500).json({ error: 'Failed to load generations.' });
   }
+});
+
+// Delete a generation (same user only)
+app.delete('/api/generations/:id', authMiddleware, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (Number.isNaN(id)) {
+    res.status(400).json({ error: 'Invalid generation id.' });
+    return;
+  }
+  const { user } = req as express.Request & { user: { email: string; userId: number } };
+  const deleted = await deleteGenerationByIdAndUserId(id, user.userId);
+  if (!deleted) {
+    res.status(404).json({ error: 'Generation not found.' });
+    return;
+  }
+  res.status(204).send();
 });
 
 // Download again: regenerate zip from a stored generation (same user only)

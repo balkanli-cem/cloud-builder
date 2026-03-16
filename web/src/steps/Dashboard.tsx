@@ -42,11 +42,23 @@ async function downloadGeneration(token: string, id: number, projectName: string
   URL.revokeObjectURL(url);
 }
 
+async function deleteGeneration(token: string, id: number): Promise<void> {
+  const res = await fetch(`/api/generations/${id}`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || res.statusText);
+  }
+}
+
 export function Dashboard({ token, onGenerateNew }: Props) {
   const [generations, setGenerations] = useState<Generation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -128,10 +140,10 @@ export function Dashboard({ token, onGenerateNew }: Props) {
               <div style={{ marginTop: '0.25rem', fontSize: '0.8125rem', color: '#94a3b8' }}>
                 {g.resourceGroupName} · {g.region}
               </div>
-              <div style={{ marginTop: '0.5rem' }}>
+              <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                 <button
                   type="button"
-                  disabled={downloadingId === g.id}
+                  disabled={downloadingId === g.id || deletingId === g.id}
                   onClick={async () => {
                     setDownloadingId(g.id);
                     try {
@@ -153,6 +165,34 @@ export function Dashboard({ token, onGenerateNew }: Props) {
                   }}
                 >
                   {downloadingId === g.id ? '…' : 'Download again'}
+                </button>
+                <button
+                  type="button"
+                  disabled={downloadingId === g.id || deletingId === g.id}
+                  onClick={async () => {
+                    if (!window.confirm(`Delete "${g.projectName}" (${g.format})? This cannot be undone.`)) return;
+                    setDeletingId(g.id);
+                    setError(null);
+                    try {
+                      await deleteGeneration(token, g.id);
+                      setGenerations((prev) => prev.filter((x) => x.id !== g.id));
+                    } catch (e) {
+                      setError(e instanceof Error ? e.message : 'Delete failed');
+                    } finally {
+                      setDeletingId(null);
+                    }
+                  }}
+                  style={{
+                    padding: '0.25rem 0.5rem',
+                    background: 'transparent',
+                    border: '1px solid #64748b',
+                    borderRadius: '4px',
+                    color: '#f87171',
+                    fontSize: '0.8125rem',
+                    cursor: deletingId === g.id ? 'wait' : 'pointer',
+                  }}
+                >
+                  {deletingId === g.id ? '…' : 'Delete'}
                 </button>
               </div>
             </li>
