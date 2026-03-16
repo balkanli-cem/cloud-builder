@@ -65,7 +65,7 @@ locals {
   sql_connection_string = "Server=tcp:${azurerm_mssql_server.main.fully_qualified_domain_name},1433;Initial Catalog=${azurerm_mssql_database.main.name};Persist Security Info=False;User ID=${var.sql_admin_login};Password=${var.sql_admin_password};MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;"
 }
 
-# Web App (Node 20) – Cloud Builder UI + API
+# Web App (Node 24) – Cloud Builder UI + API
 resource "azurerm_linux_web_app" "main" {
   name                = "${local.name_prefix}-app"
   resource_group_name = azurerm_resource_group.main.name
@@ -74,13 +74,13 @@ resource "azurerm_linux_web_app" "main" {
 
   site_config {
     application_stack {
-      node_version = "20-lts"
+      node_version = "24-lts"
     }
     always_on = false
   }
 
   app_settings = {
-    "WEBSITE_NODE_DEFAULT_VERSION"       = "~20"
+    "WEBSITE_NODE_DEFAULT_VERSION"       = "~24"
     "SCM_DO_BUILD_DURING_DEPLOYMENT"      = "true"
     "AZURE_SQL_CONNECTION_STRING"        = local.sql_connection_string
   }
