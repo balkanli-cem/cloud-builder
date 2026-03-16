@@ -17,6 +17,21 @@ async function getPool(): Promise<sql.ConnectionPool | null> {
   }
 }
 
+/**
+ * Returns true if the database is reachable (or not configured). Used for readiness probes.
+ */
+export async function checkDatabase(): Promise<{ ok: boolean; configured: boolean }> {
+  if (!CONNECTION_STRING) return { ok: true, configured: false };
+  const p = await getPool();
+  if (!p) return { ok: false, configured: true };
+  try {
+    await p.request().query('SELECT 1');
+    return { ok: true, configured: true };
+  } catch {
+    return { ok: false, configured: true };
+  }
+}
+
 export interface GenerationRow {
   Id: number;
   ProjectName: string;

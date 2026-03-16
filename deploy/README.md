@@ -93,6 +93,8 @@ After that, pushes to `main` (and manual runs of the workflow) will build and de
 
 The app expects **PORT** (set by App Service) and **AZURE_SQL_CONNECTION_STRING** (set by Terraform).
 
+**Health check:** Use `GET /api/health` for liveness (returns 200 when the app is up). Use `GET /api/health/ready` for readiness: it returns 200 when the app and database (if configured) are OK, and 503 if the DB is configured but unreachable. You can set the App Service **Health check path** to `/api/health` or `/api/health/ready` in the Azure Portal (App Service → Configuration → General settings).
+
 ## Optional: run locally with DB
 
 Set the same connection string (from Terraform output or Key Vault) and run the server:

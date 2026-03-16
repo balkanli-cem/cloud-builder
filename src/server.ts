@@ -8,7 +8,7 @@ import { generateBicep } from './generators/bicep/index';
 import { generateTerraform } from './generators/terraform/index';
 import { buildDefaultNetwork } from './core/network/defaults';
 import { SERVICE_CATALOG } from './core/services/catalog';
-import { saveGeneration, getGenerationsByUserId } from './db/client';
+import { saveGeneration, getGenerationsByUserId, checkDatabase } from './db/client';
 import { register, login, verifyToken } from './auth';
 import type { ProjectConfig } from './types/index';
 
@@ -37,6 +37,20 @@ function authMiddleware(req: express.Request, res: express.Response, next: expre
 
 // Serve built frontend (after npm run build:web)
 app.use(express.static(WEB_DIR));
+
+// Health: liveness (app is up) and readiness (app + optional DB)
+app.get('/api/health', (_req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
+app.get('/api/health/ready', async (_req, res) => {
+  const db = await checkDatabase();
+  if (db.configured && !db.ok) {
+    res.status(503).json({ status: 'degraded', database: 'unavailable' });
+    return;
+  }
+  res.status(200).json({ status: 'ok', database: db.configured ? 'connected' : 'not_configured' });
+});
 
 // Auth: register (hashed password stored in DB)
 app.post('/api/register', async (req, res) => {
