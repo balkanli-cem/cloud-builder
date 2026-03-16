@@ -10,11 +10,13 @@ import { generateTerraform } from './generators/terraform/index';
 import { buildDefaultNetwork } from './core/network/defaults';
 import { SERVICE_CATALOG } from './core/services/catalog';
 import { saveGeneration, getGenerationsByUserId, getGenerationByIdAndUserId, deleteGenerationByIdAndUserId, checkDatabase } from './db/client';
-import { register, login, verifyToken } from './auth';
+import { register, login, verifyToken, requestPasswordReset, resetPassword } from './auth';
 import {
   handleValidationErrors,
   registerValidation,
   loginValidation,
+  forgotPasswordValidation,
+  resetPasswordValidation,
   generateValidation,
   generationIdParamValidation,
   downloadFormatQueryValidation,
@@ -107,6 +109,32 @@ app.post('/api/login', authLimiter, ...loginValidation, handleValidationErrors, 
     return;
   }
   res.json({ token: result.token, email: result.email });
+});
+
+// Auth: forgot password — always 200 with generic message (no user enumeration); rate limited
+app.post('/api/forgot-password', authLimiter, ...forgotPasswordValidation, handleValidationErrors, async (req: express.Request, res: express.Response) => {
+  const { email } = req.body as { email: string };
+  const result = await requestPasswordReset(email);
+  if (result.ok) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[forgot-password] Reset link (do not log in production):', result.resetLink);
+    }
+    // TODO: send result.resetLink by email (e.g. SendGrid, Nodemailer) when configured
+  }
+  res.status(200).json({
+    message: 'If an account exists with that email, we sent a password reset link. Check your inbox and spam folder.',
+  });
+});
+
+// Auth: reset password with token from email link — rate limited
+app.post('/api/reset-password', authLimiter, ...resetPasswordValidation, handleValidationErrors, async (req: express.Request, res: express.Response) => {
+  const { token, newPassword } = req.body as { token: string; newPassword: string };
+  const result = await resetPassword(token, newPassword);
+  if (!result.ok) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+  res.status(200).json({ message: 'Password updated. You can sign in with your new password.' });
 });
 
 // Auth: current user (requires valid JWT)

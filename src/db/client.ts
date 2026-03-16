@@ -197,3 +197,71 @@ export async function createUser(email: string, passwordHash: string, displayNam
     return null;
   }
 }
+
+/**
+ * Sets password reset token and expiry for a user by email. No-op if DB not configured or column missing.
+ */
+export async function setPasswordResetToken(email: string, tokenHash: string, expiresAt: Date): Promise<boolean> {
+  const p = await getPool();
+  if (!p) return false;
+  try {
+    const result = await p.request()
+      .input('email', sql.NVarChar(256), email.trim().toLowerCase())
+      .input('tokenHash', sql.NVarChar(256), tokenHash)
+      .input('expiresAt', sql.NVarChar(30), expiresAt.toISOString())
+      .query(`
+        UPDATE dbo.Users
+        SET PasswordResetTokenHash = @tokenHash, PasswordResetExpiresAt = CONVERT(DATETIME2(7), @expiresAt, 127), UpdatedAt = SYSUTCDATETIME()
+        WHERE Email = @email
+      `);
+    const affected = (result as { rowsAffected: number[] }).rowsAffected;
+    return Array.isArray(affected) && affected[0] > 0;
+  } catch (err) {
+    console.error('setPasswordResetToken:', err);
+    return false;
+  }
+}
+
+/**
+ * Returns user Id for a valid (non-expired) reset token hash, or null.
+ */
+export async function findUserIdByResetToken(tokenHash: string): Promise<number | null> {
+  const p = await getPool();
+  if (!p) return null;
+  try {
+    const result = await p.request()
+      .input('tokenHash', sql.NVarChar(256), tokenHash)
+      .query(`
+        SELECT Id FROM dbo.Users
+        WHERE PasswordResetTokenHash = @tokenHash AND PasswordResetExpiresAt > SYSUTCDATETIME()
+      `);
+    const rows = (result as { recordset: { Id: number }[] }).recordset;
+    return rows[0]?.Id ?? null;
+  } catch (err) {
+    console.error('findUserIdByResetToken:', err);
+    return null;
+  }
+}
+
+/**
+ * Updates password and clears reset token for the user. Returns true if a row was updated.
+ */
+export async function updatePasswordAndClearResetToken(userId: number, passwordHash: string): Promise<boolean> {
+  const p = await getPool();
+  if (!p) return false;
+  try {
+    const result = await p.request()
+      .input('userId', sql.Int, userId)
+      .input('passwordHash', sql.NVarChar(256), passwordHash)
+      .query(`
+        UPDATE dbo.Users
+        SET PasswordHash = @passwordHash, PasswordResetTokenHash = NULL, PasswordResetExpiresAt = NULL, UpdatedAt = SYSUTCDATETIME()
+        WHERE Id = @userId
+      `);
+    const affected = (result as { rowsAffected: number[] }).rowsAffected;
+    return Array.isArray(affected) && affected[0] > 0;
+  } catch (err) {
+    console.error('updatePasswordAndClearResetToken:', err);
+    return false;
+  }
+}

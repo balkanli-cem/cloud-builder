@@ -6,6 +6,8 @@ import { StepServices } from './steps/StepServices';
 import { StepSummary } from './steps/StepSummary';
 import { Login } from './steps/Login';
 import { Register } from './steps/Register';
+import { ForgotPassword } from './steps/ForgotPassword';
+import { ResetPassword } from './steps/ResetPassword';
 import { Dashboard } from './steps/Dashboard';
 
 const AUTH_TOKEN_KEY = 'cloud-builder-token';
@@ -24,6 +26,10 @@ export default function App() {
   const [token, setTokenState] = useState<string | null>(() => localStorage.getItem(AUTH_TOKEN_KEY));
   const [view, setView] = useState<'dashboard' | 'wizard'>('dashboard');
   const [showRegister, setShowRegister] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [resetTokenFromUrl, setResetTokenFromUrl] = useState<string | null>(() =>
+    typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('token') : null
+  );
   const [step, setStep] = useState(1);
   const [projectName, setProjectName] = useState('');
   const [resourceGroupName, setResourceGroupName] = useState('');
@@ -84,19 +90,35 @@ export default function App() {
       : null;
 
   if (!token) {
+    const clearResetUrl = () => {
+      window.history.replaceState({}, '', window.location.pathname || '/');
+      setResetTokenFromUrl(null);
+    };
     return (
       <>
         <header style={{ marginBottom: '2rem', textAlign: 'center' }}>
           <h1 style={{ fontSize: '1.75rem', fontWeight: 700, margin: 0 }}>Cloud Builder</h1>
           <p style={{ color: '#94a3b8', marginTop: '0.25rem' }}>Azure infrastructure wizard</p>
         </header>
-        {showRegister ? (
+        {resetTokenFromUrl ? (
+          <ResetPassword
+            token={resetTokenFromUrl}
+            onSuccess={clearResetUrl}
+            onBackToLogin={clearResetUrl}
+          />
+        ) : showForgotPassword ? (
+          <ForgotPassword onBackToLogin={() => setShowForgotPassword(false)} />
+        ) : showRegister ? (
           <Register
             onRegistered={() => setShowRegister(false)}
             onGoLogin={() => setShowRegister(false)}
           />
         ) : (
-          <Login onLogin={setToken} onGoRegister={() => setShowRegister(true)} />
+          <Login
+            onLogin={setToken}
+            onGoRegister={() => setShowRegister(true)}
+            onForgotPassword={() => setShowForgotPassword(true)}
+          />
         )}
       </>
     );

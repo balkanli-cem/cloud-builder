@@ -44,34 +44,42 @@ const linkStyle: React.CSSProperties = {
 };
 
 type Props = {
-  onLogin: (token: string) => void;
-  onGoRegister: () => void;
-  onForgotPassword: () => void;
+  token: string;
+  onSuccess: () => void;
+  onBackToLogin: () => void;
 };
 
-export function Login({ onLogin, onGoRegister, onForgotPassword }: Props) {
-  const [email, setEmail] = useState('');
+export function ResetPassword({ token, onSuccess, onBackToLogin }: Props) {
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [done, setDone] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters.');
+      return;
+    }
     setLoading(true);
     try {
-      const res = await fetch('/api/login', {
+      const res = await fetch('/api/reset-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim(), password }),
+        body: JSON.stringify({ token, newPassword: password }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data.error || 'Login failed.');
+        setError(data.error || 'Reset failed.');
         return;
       }
-      if (data.token) onLogin(data.token);
-      else setError('Invalid response.');
+      setDone(true);
     } catch {
       setError('Network error.');
     } finally {
@@ -79,38 +87,51 @@ export function Login({ onLogin, onGoRegister, onForgotPassword }: Props) {
     }
   };
 
+  if (done) {
+    return (
+      <div style={formStyle}>
+        <h2 style={{ fontSize: '1.125rem', marginBottom: '1rem', textAlign: 'center' }}>Password updated</h2>
+        <p style={{ color: '#94a3b8', fontSize: '0.875rem', marginBottom: '1rem' }}>
+          You can sign in with your new password.
+        </p>
+        <button type="button" onClick={onSuccess} style={primaryButton}>
+          Sign in
+        </button>
+      </div>
+    );
+  }
+
   return (
     <form onSubmit={handleSubmit} style={formStyle}>
-      <h2 style={{ fontSize: '1.125rem', marginBottom: '1rem', textAlign: 'center' }}>Sign in</h2>
-      <label style={labelStyle}>Email</label>
-      <input
-        type="email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        placeholder="you@example.com"
-        required
-        style={inputStyle}
-        autoComplete="email"
-      />
-      <label style={labelStyle}>Password</label>
+      <h2 style={{ fontSize: '1.125rem', marginBottom: '1rem', textAlign: 'center' }}>Set new password</h2>
+      <label style={labelStyle}>New password</label>
       <input
         type="password"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
         placeholder="••••••••"
         required
+        minLength={8}
         style={inputStyle}
-        autoComplete="current-password"
+        autoComplete="new-password"
       />
-      <button type="button" onClick={onForgotPassword} style={{ ...linkStyle, background: 'none', border: 'none', padding: 0, marginBottom: '0.25rem' }}>
-        Forgot password?
-      </button>
+      <label style={labelStyle}>Confirm password</label>
+      <input
+        type="password"
+        value={confirmPassword}
+        onChange={(e) => setConfirmPassword(e.target.value)}
+        placeholder="••••••••"
+        required
+        minLength={8}
+        style={inputStyle}
+        autoComplete="new-password"
+      />
       {error && <p style={{ color: '#f87171', fontSize: '0.875rem', marginBottom: '0.5rem' }}>{error}</p>}
       <button type="submit" disabled={loading} style={primaryButton}>
-        {loading ? '…' : 'Sign in'}
+        {loading ? '…' : 'Update password'}
       </button>
-      <button type="button" onClick={onGoRegister} style={{ ...linkStyle, background: 'none', border: 'none', padding: 0 }}>
-        Create an account
+      <button type="button" onClick={onBackToLogin} style={{ ...linkStyle, background: 'none', border: 'none', padding: 0 }}>
+        Back to sign in
       </button>
     </form>
   );

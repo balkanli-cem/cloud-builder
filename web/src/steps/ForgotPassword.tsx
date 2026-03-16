@@ -44,34 +44,31 @@ const linkStyle: React.CSSProperties = {
 };
 
 type Props = {
-  onLogin: (token: string) => void;
-  onGoRegister: () => void;
-  onForgotPassword: () => void;
+  onBackToLogin: () => void;
 };
 
-export function Login({ onLogin, onGoRegister, onForgotPassword }: Props) {
+export function ForgotPassword({ onBackToLogin }: Props) {
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [sent, setSent] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
     try {
-      const res = await fetch('/api/login', {
+      const res = await fetch('/api/forgot-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim(), password }),
+        body: JSON.stringify({ email: email.trim() }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data.error || 'Login failed.');
+        setError(data.error || 'Request failed.');
         return;
       }
-      if (data.token) onLogin(data.token);
-      else setError('Invalid response.');
+      setSent(true);
     } catch {
       setError('Network error.');
     } finally {
@@ -79,9 +76,26 @@ export function Login({ onLogin, onGoRegister, onForgotPassword }: Props) {
     }
   };
 
+  if (sent) {
+    return (
+      <div style={formStyle}>
+        <h2 style={{ fontSize: '1.125rem', marginBottom: '1rem', textAlign: 'center' }}>Check your email</h2>
+        <p style={{ color: '#94a3b8', fontSize: '0.875rem', marginBottom: '1rem' }}>
+          If an account exists with that email, we sent a password reset link. Check your inbox and spam folder.
+        </p>
+        <button type="button" onClick={onBackToLogin} style={{ ...linkStyle, background: 'none', border: 'none', padding: 0 }}>
+          Back to sign in
+        </button>
+      </div>
+    );
+  }
+
   return (
     <form onSubmit={handleSubmit} style={formStyle}>
-      <h2 style={{ fontSize: '1.125rem', marginBottom: '1rem', textAlign: 'center' }}>Sign in</h2>
+      <h2 style={{ fontSize: '1.125rem', marginBottom: '1rem', textAlign: 'center' }}>Forgot password</h2>
+      <p style={{ color: '#94a3b8', fontSize: '0.875rem', marginBottom: '1rem' }}>
+        Enter your email and we’ll send you a link to reset your password.
+      </p>
       <label style={labelStyle}>Email</label>
       <input
         type="email"
@@ -92,25 +106,12 @@ export function Login({ onLogin, onGoRegister, onForgotPassword }: Props) {
         style={inputStyle}
         autoComplete="email"
       />
-      <label style={labelStyle}>Password</label>
-      <input
-        type="password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        placeholder="••••••••"
-        required
-        style={inputStyle}
-        autoComplete="current-password"
-      />
-      <button type="button" onClick={onForgotPassword} style={{ ...linkStyle, background: 'none', border: 'none', padding: 0, marginBottom: '0.25rem' }}>
-        Forgot password?
-      </button>
       {error && <p style={{ color: '#f87171', fontSize: '0.875rem', marginBottom: '0.5rem' }}>{error}</p>}
       <button type="submit" disabled={loading} style={primaryButton}>
-        {loading ? '…' : 'Sign in'}
+        {loading ? '…' : 'Send reset link'}
       </button>
-      <button type="button" onClick={onGoRegister} style={{ ...linkStyle, background: 'none', border: 'none', padding: 0 }}>
-        Create an account
+      <button type="button" onClick={onBackToLogin} style={{ ...linkStyle, background: 'none', border: 'none', padding: 0 }}>
+        Back to sign in
       </button>
     </form>
   );

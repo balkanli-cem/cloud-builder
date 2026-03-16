@@ -55,6 +55,25 @@ export const loginValidation: ValidationChain[] = [
   body('password').notEmpty().withMessage('Password is required'),
 ];
 
+export const forgotPasswordValidation: ValidationChain[] = [
+  body('email')
+    .trim()
+    .notEmpty()
+    .withMessage('Email is required')
+    .isEmail()
+    .withMessage('Valid email required')
+    .normalizeEmail(),
+];
+
+export const resetPasswordValidation: ValidationChain[] = [
+  body('token').trim().notEmpty().withMessage('Reset token is required'),
+  body('newPassword')
+    .notEmpty()
+    .withMessage('New password is required')
+    .isLength({ min: 8 })
+    .withMessage('Password must be at least 8 characters'),
+];
+
 const REGIONS = ['westeurope', 'swedencentral', 'belgiumcentral'] as const;
 
 export const generateValidation: ValidationChain[] = [
