@@ -27,10 +27,26 @@ function formatDate(iso: string): string {
   }
 }
 
+async function downloadGeneration(token: string, id: number, projectName: string, format: string): Promise<void> {
+  const res = await fetch(`/api/generations/${id}/download`, { headers: authHeaders(token) });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || res.statusText);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${projectName}-${format}.zip`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export function Dashboard({ token, onGenerateNew }: Props) {
   const [generations, setGenerations] = useState<Generation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -111,6 +127,33 @@ export function Dashboard({ token, onGenerateNew }: Props) {
               </div>
               <div style={{ marginTop: '0.25rem', fontSize: '0.8125rem', color: '#94a3b8' }}>
                 {g.resourceGroupName} · {g.region}
+              </div>
+              <div style={{ marginTop: '0.5rem' }}>
+                <button
+                  type="button"
+                  disabled={downloadingId === g.id}
+                  onClick={async () => {
+                    setDownloadingId(g.id);
+                    try {
+                      await downloadGeneration(token, g.id, g.projectName, g.format);
+                    } catch (e) {
+                      setError(e instanceof Error ? e.message : 'Download failed');
+                    } finally {
+                      setDownloadingId(null);
+                    }
+                  }}
+                  style={{
+                    padding: '0.25rem 0.5rem',
+                    background: 'transparent',
+                    border: '1px solid #475569',
+                    borderRadius: '4px',
+                    color: '#94a3b8',
+                    fontSize: '0.8125rem',
+                    cursor: downloadingId === g.id ? 'wait' : 'pointer',
+                  }}
+                >
+                  {downloadingId === g.id ? '…' : 'Download again'}
+                </button>
               </div>
             </li>
           ))}

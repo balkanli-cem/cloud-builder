@@ -9,7 +9,7 @@ import { generateBicep } from './generators/bicep/index';
 import { generateTerraform } from './generators/terraform/index';
 import { buildDefaultNetwork } from './core/network/defaults';
 import { SERVICE_CATALOG } from './core/services/catalog';
-import { saveGeneration, getGenerationsByUserId, checkDatabase } from './db/client';
+import { saveGeneration, getGenerationsByUserId, getGenerationByIdAndUserId, checkDatabase } from './db/client';
 import { register, login, verifyToken } from './auth';
 import type { ProjectConfig } from './types/index';
 
@@ -124,6 +124,64 @@ app.get('/api/generations', authMiddleware, async (req, res) => {
   } catch (err) {
     console.error('GET /api/generations:', err);
     res.status(500).json({ error: 'Failed to load generations.' });
+  }
+});
+
+// Download again: regenerate zip from a stored generation (same user only)
+app.get('/api/generations/:id/download', generateLimiter, authMiddleware, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (Number.isNaN(id)) {
+    res.status(400).json({ error: 'Invalid generation id.' });
+    return;
+  }
+  const { user } = req as express.Request & { user: { email: string; userId: number } };
+  const row = await getGenerationByIdAndUserId(id, user.userId);
+  if (!row) {
+    res.status(404).json({ error: 'Generation not found.' });
+    return;
+  }
+  let config: ProjectConfig;
+  try {
+    const network = JSON.parse(row.NetworkJson) as ProjectConfig['network'];
+    const services = JSON.parse(row.ServicesJson) as ProjectConfig['services'];
+    const region = (row.Region === 'westeurope' || row.Region === 'swedencentral' || row.Region === 'belgiumcentral')
+      ? row.Region
+      : 'westeurope';
+    config = {
+      projectName: row.ProjectName,
+      resourceGroupName: row.ResourceGroupName,
+      region,
+      network,
+      services,
+    };
+  } catch (err) {
+    console.error('Download again: invalid stored JSON', err);
+    res.status(500).json({ error: 'Stored generation data is invalid.' });
+    return;
+  }
+  const format = row.Format === 'terraform' ? 'terraform' : 'bicep';
+  let tempDir: string | null = null;
+  try {
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cloud-builder-'));
+    if (format === 'bicep') {
+      await generateBicep(config, tempDir);
+    } else {
+      await generateTerraform(config, tempDir);
+    }
+    const archive = archiver('zip', { zlib: { level: 6 } });
+    res.attachment(`${config.projectName}-${format}.zip`);
+    archive.pipe(res);
+    archive.directory(tempDir, false);
+    await archive.finalize();
+  } catch (err) {
+    console.error(err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: err instanceof Error ? err.message : 'Generation failed.' });
+    }
+  } finally {
+    if (tempDir) {
+      await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    }
   }
 });
 

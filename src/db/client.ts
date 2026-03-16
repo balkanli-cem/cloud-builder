@@ -41,6 +41,35 @@ export interface GenerationRow {
   CreatedAt: Date;
 }
 
+/** Full row with JSON columns, for "download again" (reconstruct config and regenerate zip). */
+export interface GenerationFullRow extends GenerationRow {
+  NetworkJson: string;
+  ServicesJson: string;
+}
+
+/**
+ * Returns one generation by id only if it belongs to the given user. Used for download again.
+ */
+export async function getGenerationByIdAndUserId(id: number, userId: number): Promise<GenerationFullRow | null> {
+  const p = await getPool();
+  if (!p) return null;
+  try {
+    const result = await p.request()
+      .input('id', sql.Int, id)
+      .input('userId', sql.Int, userId)
+      .query(`
+        SELECT Id, ProjectName, ResourceGroupName, Region, NetworkJson, ServicesJson, Format, CreatedAt
+        FROM dbo.Generations
+        WHERE Id = @id AND UserId = @userId
+      `);
+    const rows = (result as { recordset: GenerationFullRow[] }).recordset;
+    return rows[0] ?? null;
+  } catch (err) {
+    console.error('getGenerationByIdAndUserId:', err);
+    return null;
+  }
+}
+
 /**
  * Saves a generation record to Azure SQL. No-op if AZURE_SQL_CONNECTION_STRING is not set.
  * userId is set when the user is logged in so generations appear in "My generations".
