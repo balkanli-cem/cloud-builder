@@ -11,6 +11,13 @@ import { buildDefaultNetwork } from './core/network/defaults';
 import { SERVICE_CATALOG } from './core/services/catalog';
 import { saveGeneration, getGenerationsByUserId, getGenerationByIdAndUserId, deleteGenerationByIdAndUserId, checkDatabase } from './db/client';
 import { register, login, verifyToken } from './auth';
+import {
+  handleValidationErrors,
+  registerValidation,
+  loginValidation,
+  generateValidation,
+  generationIdParamValidation,
+} from './validation';
 import type { ProjectConfig } from './types/index';
 
 const app = express();
@@ -79,10 +86,10 @@ app.get('/api/health/ready', async (_req, res) => {
   res.status(200).json({ status: 'ok', database: db.configured ? 'connected' : 'not_configured' });
 });
 
-// Auth: register (hashed password stored in DB) — rate limited
-app.post('/api/register', authLimiter, async (req, res) => {
-  const { email, password, displayName } = req.body as { email?: string; password?: string; displayName?: string };
-  const result = await register(email ?? '', password ?? '', displayName);
+// Auth: register (hashed password stored in DB) — rate limited, validated
+app.post('/api/register', authLimiter, ...registerValidation, handleValidationErrors, async (req: express.Request, res: express.Response) => {
+  const { email, password, displayName } = req.body as { email: string; password: string; displayName?: string };
+  const result = await register(email, password, displayName);
   if (!result.ok) {
     res.status(result.error.includes('already exists') ? 409 : 400).json({ error: result.error });
     return;
@@ -90,10 +97,10 @@ app.post('/api/register', authLimiter, async (req, res) => {
   res.status(201).json({ ok: true, userId: result.userId });
 });
 
-// Auth: login (returns JWT; password checked against hash) — rate limited
-app.post('/api/login', authLimiter, async (req, res) => {
-  const { email, password } = req.body as { email?: string; password?: string };
-  const result = await login(email ?? '', password ?? '');
+// Auth: login (returns JWT; password checked against hash) — rate limited, validated
+app.post('/api/login', authLimiter, ...loginValidation, handleValidationErrors, async (req: express.Request, res: express.Response) => {
+  const { email, password } = req.body as { email: string; password: string };
+  const result = await login(email, password);
   if (!result.ok) {
     res.status(401).json({ error: result.error });
     return;
@@ -127,13 +134,9 @@ app.get('/api/generations', authMiddleware, async (req, res) => {
   }
 });
 
-// Delete a generation (same user only)
-app.delete('/api/generations/:id', authMiddleware, async (req, res) => {
+// Delete a generation (same user only) — validated param
+app.delete('/api/generations/:id', ...generationIdParamValidation, handleValidationErrors, authMiddleware, async (req: express.Request, res: express.Response) => {
   const id = parseInt(req.params.id, 10);
-  if (Number.isNaN(id)) {
-    res.status(400).json({ error: 'Invalid generation id.' });
-    return;
-  }
   const { user } = req as express.Request & { user: { email: string; userId: number } };
   const deleted = await deleteGenerationByIdAndUserId(id, user.userId);
   if (!deleted) {
@@ -143,13 +146,9 @@ app.delete('/api/generations/:id', authMiddleware, async (req, res) => {
   res.status(204).send();
 });
 
-// Download again: regenerate zip from a stored generation (same user only)
-app.get('/api/generations/:id/download', generateLimiter, authMiddleware, async (req, res) => {
+// Download again: regenerate zip from a stored generation (same user only) — validated param
+app.get('/api/generations/:id/download', generateLimiter, ...generationIdParamValidation, handleValidationErrors, authMiddleware, async (req: express.Request, res: express.Response) => {
   const id = parseInt(req.params.id, 10);
-  if (Number.isNaN(id)) {
-    res.status(400).json({ error: 'Invalid generation id.' });
-    return;
-  }
   const { user } = req as express.Request & { user: { email: string; userId: number } };
   const row = await getGenerationByIdAndUserId(id, user.userId);
   if (!row) {
@@ -211,17 +210,9 @@ app.get('/api/default-network/:projectName', authMiddleware, (req, res) => {
   res.json(network);
 });
 
-// Generate IaC and return as ZIP (protected, rate limited)
-app.post('/api/generate', generateLimiter, authMiddleware, async (req, res) => {
+// Generate IaC and return as ZIP (protected, rate limited, validated)
+app.post('/api/generate', generateLimiter, authMiddleware, ...generateValidation, handleValidationErrors, async (req: express.Request, res: express.Response) => {
   const { config, format } = req.body as { config: ProjectConfig; format: 'bicep' | 'terraform' };
-  if (!config || !format || !config.projectName || !config.network || !Array.isArray(config.services)) {
-    res.status(400).json({ error: 'Invalid request: config (projectName, network, services) and format (bicep|terraform) required.' });
-    return;
-  }
-  if (format !== 'bicep' && format !== 'terraform') {
-    res.status(400).json({ error: 'format must be "bicep" or "terraform".' });
-    return;
-  }
 
   let tempDir: string | null = null;
   try {
