@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
-import { body, param, validationResult, type ValidationChain } from 'express-validator';
+import { body, param, query, validationResult, type ValidationChain } from 'express-validator';
 
 /**
  * Sends 400 with validation errors. Use after running validation chains.
@@ -109,4 +109,12 @@ export const generationIdParamValidation: ValidationChain[] = [
     .isInt({ min: 1 })
     .withMessage('id must be a positive integer')
     .toInt(),
+];
+
+/** Optional format for download-again (defaults to stored format if omitted). */
+export const downloadFormatQueryValidation: ValidationChain[] = [
+  query('format')
+    .optional()
+    .isIn(['bicep', 'terraform'])
+    .withMessage('format must be "bicep" or "terraform"'),
 ];

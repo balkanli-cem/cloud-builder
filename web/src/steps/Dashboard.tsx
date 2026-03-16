@@ -27,8 +27,10 @@ function formatDate(iso: string): string {
   }
 }
 
-async function downloadGeneration(token: string, id: number, projectName: string, format: string): Promise<void> {
-  const res = await fetch(`/api/generations/${id}/download`, { headers: authHeaders(token) });
+type DownloadFormat = 'bicep' | 'terraform';
+
+async function downloadGeneration(token: string, id: number, projectName: string, format: DownloadFormat): Promise<void> {
+  const res = await fetch(`/api/generations/${id}/download?format=${format}`, { headers: authHeaders(token) });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new Error(data.error || res.statusText);
@@ -57,7 +59,7 @@ export function Dashboard({ token, onGenerateNew }: Props) {
   const [generations, setGenerations] = useState<Generation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [downloadingId, setDownloadingId] = useState<number | null>(null);
+  const [downloading, setDownloading] = useState<string | null>(null); // e.g. "123-bicep" or "123-terraform"
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
   useEffect(() => {
@@ -140,35 +142,63 @@ export function Dashboard({ token, onGenerateNew }: Props) {
               <div style={{ marginTop: '0.25rem', fontSize: '0.8125rem', color: '#94a3b8' }}>
                 {g.resourceGroupName} · {g.region}
               </div>
-              <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                <span style={{ color: '#64748b', fontSize: '0.8125rem', marginRight: '0.25rem' }}>Download:</span>
                 <button
                   type="button"
-                  disabled={downloadingId === g.id || deletingId === g.id}
+                  disabled={!!downloading || deletingId === g.id}
                   onClick={async () => {
-                    setDownloadingId(g.id);
+                    setDownloading(`${g.id}-bicep`);
                     try {
-                      await downloadGeneration(token, g.id, g.projectName, g.format);
+                      await downloadGeneration(token, g.id, g.projectName, 'bicep');
                     } catch (e) {
                       setError(e instanceof Error ? e.message : 'Download failed');
                     } finally {
-                      setDownloadingId(null);
+                      setDownloading(null);
                     }
                   }}
                   style={{
                     padding: '0.25rem 0.5rem',
-                    background: 'transparent',
-                    border: '1px solid #475569',
+                    background: downloading === `${g.id}-bicep` ? '#334155' : '#3b82f6',
+                    border: 'none',
                     borderRadius: '4px',
-                    color: '#94a3b8',
+                    color: 'white',
                     fontSize: '0.8125rem',
-                    cursor: downloadingId === g.id ? 'wait' : 'pointer',
+                    fontWeight: 500,
+                    cursor: downloading ? 'wait' : 'pointer',
                   }}
                 >
-                  {downloadingId === g.id ? '…' : 'Download again'}
+                  {downloading === `${g.id}-bicep` ? '…' : 'Bicep'}
                 </button>
                 <button
                   type="button"
-                  disabled={downloadingId === g.id || deletingId === g.id}
+                  disabled={!!downloading || deletingId === g.id}
+                  onClick={async () => {
+                    setDownloading(`${g.id}-terraform`);
+                    try {
+                      await downloadGeneration(token, g.id, g.projectName, 'terraform');
+                    } catch (e) {
+                      setError(e instanceof Error ? e.message : 'Download failed');
+                    } finally {
+                      setDownloading(null);
+                    }
+                  }}
+                  style={{
+                    padding: '0.25rem 0.5rem',
+                    background: downloading === `${g.id}-terraform` ? '#334155' : '#3b82f6',
+                    border: 'none',
+                    borderRadius: '4px',
+                    color: 'white',
+                    fontSize: '0.8125rem',
+                    fontWeight: 500,
+                    cursor: downloading ? 'wait' : 'pointer',
+                  }}
+                >
+                  {downloading === `${g.id}-terraform` ? '…' : 'Terraform'}
+                </button>
+                <button
+                  type="button"
+                  disabled={!!downloading || deletingId === g.id}
                   onClick={async () => {
                     if (!window.confirm(`Delete "${g.projectName}" (${g.format})? This cannot be undone.`)) return;
                     setDeletingId(g.id);

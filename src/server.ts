@@ -17,6 +17,7 @@ import {
   loginValidation,
   generateValidation,
   generationIdParamValidation,
+  downloadFormatQueryValidation,
 } from './validation';
 import type { ProjectConfig } from './types/index';
 
@@ -147,7 +148,7 @@ app.delete('/api/generations/:id', ...generationIdParamValidation, handleValidat
 });
 
 // Download again: regenerate zip from a stored generation (same user only) — validated param
-app.get('/api/generations/:id/download', generateLimiter, ...generationIdParamValidation, handleValidationErrors, authMiddleware, async (req: express.Request, res: express.Response) => {
+app.get('/api/generations/:id/download', generateLimiter, ...generationIdParamValidation, ...downloadFormatQueryValidation, handleValidationErrors, authMiddleware, async (req: express.Request, res: express.Response) => {
   const id = parseInt(req.params.id, 10);
   const { user } = req as express.Request & { user: { email: string; userId: number } };
   const row = await getGenerationByIdAndUserId(id, user.userId);
@@ -174,7 +175,8 @@ app.get('/api/generations/:id/download', generateLimiter, ...generationIdParamVa
     res.status(500).json({ error: 'Stored generation data is invalid.' });
     return;
   }
-  const format = row.Format === 'terraform' ? 'terraform' : 'bicep';
+  const requestedFormat = req.query.format as string | undefined;
+  const format = (requestedFormat === 'terraform' || requestedFormat === 'bicep') ? requestedFormat : (row.Format === 'terraform' ? 'terraform' : 'bicep');
   let tempDir: string | null = null;
   try {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cloud-builder-'));
