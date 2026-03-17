@@ -1,4 +1,5 @@
 import type { ProjectConfig } from '../types';
+import { InfoIcon } from '../components/InfoIcon';
 
 type Props = {
   projectName: string;
@@ -24,11 +25,15 @@ export function StepProject({
   const valid = /^[a-z0-9-]+$/.test(projectName) && /^[a-z0-9-]*$/.test(resourceGroupName);
   return (
     <section>
-      <h2 style={{ fontSize: '1.125rem', marginBottom: '1rem' }}>Project</h2>
+      <h2 style={{ fontSize: '1.125rem', marginBottom: '1rem', display: 'inline-flex', alignItems: 'center' }}>
+        Project
+        <InfoIcon text="Basic identifiers for your deployment. These names are used in the generated Bicep or Terraform and must follow Azure naming rules (lowercase letters, numbers, hyphens)." placement="below" />
+      </h2>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
         <label>
-          <span style={{ display: 'block', marginBottom: '0.25rem', color: '#94a3b8' }}>
+          <span style={{ display: 'flex', alignItems: 'center', marginBottom: '0.25rem', color: '#94a3b8', gap: '0.25rem' }}>
             Project name (lowercase, hyphens allowed)
+            <InfoIcon text="Used as a prefix for resource names (e.g. VNet, subnets). Must be unique within your design." />
           </span>
           <input
             type="text"
@@ -39,8 +44,9 @@ export function StepProject({
           />
         </label>
         <label>
-          <span style={{ display: 'block', marginBottom: '0.25rem', color: '#94a3b8' }}>
+          <span style={{ display: 'flex', alignItems: 'center', marginBottom: '0.25rem', color: '#94a3b8', gap: '0.25rem' }}>
             Resource group name
+            <InfoIcon text="Azure resource groups hold all resources for this project. Often named like project-rg. Leave blank to use project-name-rg." />
           </span>
           <input
             type="text"
@@ -51,8 +57,9 @@ export function StepProject({
           />
         </label>
         <label>
-          <span style={{ display: 'block', marginBottom: '0.25rem', color: '#94a3b8' }}>
+          <span style={{ display: 'flex', alignItems: 'center', marginBottom: '0.25rem', color: '#94a3b8', gap: '0.25rem' }}>
             Azure region
+            <InfoIcon text="Where your resources will be deployed. Choose a region close to your users or that meets compliance needs." />
           </span>
           <select
             value={region}

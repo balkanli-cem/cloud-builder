@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { InfoIcon } from '../components/InfoIcon';
 
 export interface Generation {
   id: number;
@@ -118,22 +119,28 @@ export function Dashboard({ token, onGenerateNew }: Props) {
   return (
     <section style={{ maxWidth: '36rem', margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '0.75rem' }}>
-        <h2 style={{ fontSize: '1.125rem', margin: 0 }}>My generations</h2>
-        <button
-          type="button"
-          onClick={onGenerateNew}
-          style={{
-            padding: '0.5rem 1rem',
-            background: '#3b82f6',
-            border: 'none',
-            borderRadius: '6px',
-            color: 'white',
-            fontWeight: 600,
-            cursor: 'pointer',
-          }}
-        >
-          Generate new
-        </button>
+        <h2 style={{ fontSize: '1.125rem', margin: 0, display: 'inline-flex', alignItems: 'center' }}>
+          My generations
+          <InfoIcon text="All architectures you generated while signed in. Each row can be downloaded again as Bicep or Terraform. Validation badges show whether the generated code passed bicep build or terraform validate (if the tools were available at generation time)." />
+        </h2>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+          <button
+            type="button"
+            onClick={onGenerateNew}
+            style={{
+              padding: '0.5rem 1rem',
+              background: '#3b82f6',
+              border: 'none',
+              borderRadius: '6px',
+              color: 'white',
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            Generate new
+          </button>
+          <InfoIcon text="Start the wizard to define a new project: name, resource group, region, virtual network, and Azure services. You can then download Bicep or Terraform for the same design." placement="below" />
+        </span>
       </div>
 
       {error && (
@@ -174,7 +181,10 @@ export function Dashboard({ token, onGenerateNew }: Props) {
                 {g.resourceGroupName} · {g.region}
               </div>
               <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                <span style={{ color: '#64748b', fontSize: '0.8125rem', marginRight: '0.25rem' }}>Download:</span>
+                <span style={{ color: '#64748b', fontSize: '0.8125rem', marginRight: '0.25rem', display: 'inline-flex', alignItems: 'center' }}>
+                  Download:
+                  <InfoIcon text="Bicep: Azure native DSL; use with Azure CLI or deployment stacks. Terraform: use with Terraform CLI and state. Same design, different format—pick the one that fits your pipeline. Delete removes this entry from your list only; it does not affect any resources in Azure." placement="below" />
+                </span>
                 <button
                   type="button"
                   disabled={!!downloading || deletingId === g.id}

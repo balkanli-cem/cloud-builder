@@ -9,6 +9,7 @@ import { Register } from './steps/Register';
 import { ForgotPassword } from './steps/ForgotPassword';
 import { ResetPassword } from './steps/ResetPassword';
 import { Dashboard } from './steps/Dashboard';
+import { InfoIcon } from './components/InfoIcon';
 
 const AUTH_TOKEN_KEY = 'cloud-builder-token';
 
@@ -98,7 +99,10 @@ export default function App() {
       <>
         <header style={{ marginBottom: '2rem', textAlign: 'center' }}>
           <h1 style={{ fontSize: '1.75rem', fontWeight: 700, margin: 0 }}>Cloud Builder</h1>
-          <p style={{ color: '#94a3b8', marginTop: '0.25rem' }}>Azure infrastructure wizard</p>
+          <p style={{ color: '#94a3b8', marginTop: '0.25rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: '0.25rem' }}>
+            Azure infrastructure wizard
+            <InfoIcon text="Design a virtual network and Azure services (VMs, VMSS, etc.) in a few steps, then download ready-to-deploy Bicep or Terraform code. Sign in to save your generations and access them later." placement="below" />
+          </p>
         </header>
         {resetTokenFromUrl ? (
           <ResetPassword
@@ -129,7 +133,10 @@ export default function App() {
       <>
         <header style={{ marginBottom: '2rem', textAlign: 'center' }}>
           <h1 style={{ fontSize: '1.75rem', fontWeight: 700, margin: 0 }}>Cloud Builder</h1>
-          <p style={{ color: '#94a3b8', marginTop: '0.25rem' }}>Azure infrastructure wizard</p>
+          <p style={{ color: '#94a3b8', marginTop: '0.25rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: '0.25rem' }}>
+            Azure infrastructure wizard
+            <InfoIcon text="Design a virtual network and Azure services (VMs, VMSS, etc.) in a few steps, then download ready-to-deploy Bicep or Terraform code. Sign in to save your generations and access them later." placement="below" />
+          </p>
           <button
             type="button"
             onClick={logout}
@@ -156,7 +163,10 @@ export default function App() {
     <>
       <header style={{ marginBottom: '2rem', textAlign: 'center' }}>
         <h1 style={{ fontSize: '1.75rem', fontWeight: 700, margin: 0 }}>Cloud Builder</h1>
-        <p style={{ color: '#94a3b8', marginTop: '0.25rem' }}>Azure infrastructure wizard</p>
+        <p style={{ color: '#94a3b8', marginTop: '0.25rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: '0.25rem' }}>
+          Azure infrastructure wizard
+          <InfoIcon text="Design a virtual network and Azure services (VMs, VMSS, etc.) in a few steps, then download ready-to-deploy Bicep or Terraform code. Sign in to save your generations and access them later." placement="below" />
+        </p>
         <button
           type="button"
           onClick={goToDashboard}

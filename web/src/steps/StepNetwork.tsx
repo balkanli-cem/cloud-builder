@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { NetworkConfig, SubnetConfig } from '../types';
+import { InfoIcon } from '../components/InfoIcon';
 
 const CIDR_REGEX = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d{1,2}$/;
 const NAME_REGEX = /^[a-z0-9-]+$/;
@@ -146,7 +147,10 @@ export function StepNetwork({ projectName, network, setNetwork, authToken, onNex
 
   return (
     <section>
-      <h2 style={{ fontSize: '1.125rem', marginBottom: '1rem' }}>Network</h2>
+      <h2 style={{ fontSize: '1.125rem', marginBottom: '1rem', display: 'inline-flex', alignItems: 'center' }}>
+        Network
+        <InfoIcon text="Define a virtual network (VNet) and subnets. Resources like VMs and VMSS are placed into a subnet. Use the default layout for a ready-made VNet and subnets, or customize names and CIDR ranges." placement="below" />
+      </h2>
       <div style={{ background: '#1e293b', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
         <div style={{ marginBottom: '0.5rem' }}><strong>VNet</strong> {current.vnetName}</div>
         <div style={{ marginBottom: '0.5rem' }}><strong>Address space</strong> {current.addressSpace}</div>

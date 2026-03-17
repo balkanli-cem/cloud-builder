@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { InfoIcon } from '../components/InfoIcon';
 
 const formStyle: React.CSSProperties = {
   maxWidth: '20rem',
@@ -88,7 +89,11 @@ export function Register({ onRegistered, onGoLogin }: Props) {
 
   return (
     <form onSubmit={handleSubmit} style={formStyle}>
-      <h2 style={{ fontSize: '1.125rem', marginBottom: '1rem', textAlign: 'center' }}>Create account</h2>
+      <h2 style={{ fontSize: '1.125rem', marginBottom: '0.25rem', textAlign: 'center' }}>Create account</h2>
+      <p style={{ color: '#94a3b8', fontSize: '0.8125rem', marginBottom: '1rem', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem', flexWrap: 'wrap' }}>
+        Save and manage your generations
+        <InfoIcon text="Register to store your Bicep and Terraform generations under your account. You can revisit them anytime, download again in either format, or delete them." />
+      </p>
       <label style={labelStyle}>Email</label>
       <input
         type="email"

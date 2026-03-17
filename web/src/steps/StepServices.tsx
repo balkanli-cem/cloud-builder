@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { NetworkConfig, AzureService, ServiceEntry, VMConfig, VMSSConfig } from '../types';
+import { InfoIcon } from '../components/InfoIcon';
 
 type Props = {
   projectName: string;
@@ -79,8 +80,11 @@ export function StepServices({
 
   return (
     <section>
-      <h2 style={{ fontSize: '1.125rem', marginBottom: '1rem' }}>Services</h2>
-      <p style={{ color: '#94a3b8', marginBottom: '1rem', fontSize: '0.875rem' }}>
+      <h2 style={{ fontSize: '1.125rem', marginBottom: '0.25rem', display: 'inline-flex', alignItems: 'center' }}>
+        Services
+        <InfoIcon text="Add Azure resources (VMs, VMSS, etc.) to your design. Each service gets a name and is placed in one of your subnets. The generated Bicep or Terraform will create these resources in Azure." placement="below" />
+      </h2>
+      <p style={{ color: '#94a3b8', marginBottom: '1rem', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.25rem', flexWrap: 'wrap' }}>
         Select Azure services. Each gets a resource name and subnet.
       </p>
       <div style={{ marginBottom: '1rem' }}>

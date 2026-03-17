@@ -1,4 +1,5 @@
 import type { ProjectConfig } from '../types';
+import { InfoIcon } from '../components/InfoIcon';
 
 const REGION_LABELS: Record<ProjectConfig['region'], string> = {
   westeurope: 'West Europe',
@@ -48,24 +49,33 @@ export function StepSummary({
           ))}
         </div>
       </div>
-      <p style={{ color: '#94a3b8', marginBottom: '0.75rem' }}>Choose output format and generate:</p>
-      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
-        <button
-          type="button"
-          onClick={bicepDownloaded ? undefined : () => onGenerate('bicep')}
-          disabled={generating || bicepDownloaded}
-          style={downloadButtonStyle(bicepDownloaded)}
-        >
-          {bicepDownloaded ? 'Downloaded Bicep' : generating ? '…' : 'Download Bicep'}
-        </button>
-        <button
-          type="button"
-          onClick={terraformDownloaded ? undefined : () => onGenerate('terraform')}
-          disabled={generating || terraformDownloaded}
-          style={downloadButtonStyle(terraformDownloaded)}
-        >
-          {terraformDownloaded ? 'Downloaded Terraform' : generating ? '…' : 'Download Terraform'}
-        </button>
+      <p style={{ color: '#94a3b8', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem', flexWrap: 'wrap' }}>
+        Choose output format and generate:
+        <InfoIcon text="Bicep: Azure's native language; deploys with Azure CLI (az deployment sub create) or deployment stacks. Terraform: use with Terraform CLI and your chosen backend (e.g. Azure). You can download both for the same design." placement="below" />
+      </p>
+      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1rem', alignItems: 'center' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+          <button
+            type="button"
+            onClick={bicepDownloaded ? undefined : () => onGenerate('bicep')}
+            disabled={generating || bicepDownloaded}
+            style={downloadButtonStyle(bicepDownloaded)}
+          >
+            {bicepDownloaded ? 'Downloaded Bicep' : generating ? '…' : 'Download Bicep'}
+          </button>
+          <InfoIcon text="Generates main.bicep and modules. Deploy with Azure CLI or Bicep deployment stacks." placement="below" />
+        </span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+          <button
+            type="button"
+            onClick={terraformDownloaded ? undefined : () => onGenerate('terraform')}
+            disabled={generating || terraformDownloaded}
+            style={downloadButtonStyle(terraformDownloaded)}
+          >
+            {terraformDownloaded ? 'Downloaded Terraform' : generating ? '…' : 'Download Terraform'}
+          </button>
+          <InfoIcon text="Generates .tf files for Azure provider. Run terraform init and terraform apply in the downloaded folder." placement="below" />
+        </span>
       </div>
 
       {showDownloadOtherPrompt && (

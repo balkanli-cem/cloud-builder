@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { InfoIcon } from '../components/InfoIcon';
 
 const formStyle: React.CSSProperties = {
   maxWidth: '20rem',
@@ -93,8 +94,9 @@ export function ForgotPassword({ onBackToLogin }: Props) {
   return (
     <form onSubmit={handleSubmit} style={formStyle}>
       <h2 style={{ fontSize: '1.125rem', marginBottom: '1rem', textAlign: 'center' }}>Forgot password</h2>
-      <p style={{ color: '#94a3b8', fontSize: '0.875rem', marginBottom: '1rem' }}>
+      <p style={{ color: '#94a3b8', fontSize: '0.875rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem', flexWrap: 'wrap' }}>
         Enter your email and we’ll send you a link to reset your password.
+        <InfoIcon text="We'll email you a secure link (valid for 1 hour) to set a new password. Check spam if you don't see it. We never reveal whether an account exists." placement="below" />
       </p>
       <label style={labelStyle}>Email</label>
       <input
