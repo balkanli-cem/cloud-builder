@@ -7,6 +7,8 @@ export interface Generation {
   region: string;
   format: string;
   createdAt: string;
+  validationStatus?: string | null;
+  validationMessage?: string | null;
 }
 
 type Props = {
@@ -25,6 +27,34 @@ function formatDate(iso: string): string {
   } catch {
     return iso;
   }
+}
+
+function validationBadge(status: string | null, message: string | null): React.ReactNode {
+  const label =
+    status === 'success' ? 'Valid' :
+    status === 'warning' ? 'Warnings' :
+    status === 'error' ? 'Invalid' :
+    status === 'skipped' ? 'Not validated' : null;
+  if (!label) return null;
+  const color =
+    status === 'success' ? '#22c55e' :
+    status === 'warning' ? '#eab308' :
+    status === 'error' ? '#ef4444' : '#64748b';
+  return (
+    <span
+      title={message || undefined}
+      style={{
+        marginLeft: '0.5rem',
+        fontSize: '0.6875rem',
+        fontWeight: 600,
+        color,
+        textTransform: 'uppercase',
+        letterSpacing: '0.02em',
+      }}
+    >
+      · {label}
+    </span>
+  );
 }
 
 type DownloadFormat = 'bicep' | 'terraform';
@@ -136,6 +166,7 @@ export function Dashboard({ token, onGenerateNew }: Props) {
                   <span style={{ marginLeft: '0.5rem', color: '#64748b', fontSize: '0.8125rem' }}>
                     {g.format === 'bicep' ? 'Bicep' : 'Terraform'}
                   </span>
+                  {validationBadge(g.validationStatus ?? null, g.validationMessage ?? null)}
                 </div>
                 <span style={{ color: '#94a3b8', fontSize: '0.8125rem' }}>{formatDate(g.createdAt)}</span>
               </div>

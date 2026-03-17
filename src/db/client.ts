@@ -39,6 +39,8 @@ export interface GenerationRow {
   Region: string;
   Format: string;
   CreatedAt: Date;
+  ValidationStatus?: string | null;
+  ValidationMessage?: string | null;
 }
 
 /** Full row with JSON columns, for "download again" (reconstruct config and regenerate zip). */
@@ -92,14 +94,19 @@ export async function deleteGenerationByIdAndUserId(id: number, userId: number):
 /**
  * Saves a generation record to Azure SQL. No-op if AZURE_SQL_CONNECTION_STRING is not set.
  * userId is set when the user is logged in so generations appear in "My generations".
+ * validationStatus/validationMessage are optional (run schema-validation.sql to add columns).
  */
 export async function saveGeneration(
   config: ProjectConfig,
   format: 'bicep' | 'terraform',
   userId?: number | null,
+  validation?: { status: string; message: string } | null,
 ): Promise<void> {
   const p = await getPool();
   if (!p) return;
+
+  const status = validation?.status ?? null;
+  const message = validation?.message ?? null;
 
   try {
     const req = p.request()
@@ -108,26 +115,56 @@ export async function saveGeneration(
       .input('region', sql.NVarChar(64), config.region)
       .input('networkJson', sql.NVarChar(sql.MAX as number), JSON.stringify(config.network))
       .input('servicesJson', sql.NVarChar(sql.MAX as number), JSON.stringify(config.services))
-      .input('format', sql.NVarChar(32), format);
+      .input('format', sql.NVarChar(32), format)
+      .input('validationStatus', sql.NVarChar(20), status)
+      .input('validationMessage', sql.NVarChar(sql.MAX as number), message);
     if (userId != null) {
       req.input('userId', sql.Int, userId);
       await req.query(`
-        INSERT INTO dbo.Generations (UserId, ProjectName, ResourceGroupName, Region, NetworkJson, ServicesJson, Format)
-        VALUES (@userId, @projectName, @resourceGroupName, @region, @networkJson, @servicesJson, @format)
+        INSERT INTO dbo.Generations (UserId, ProjectName, ResourceGroupName, Region, NetworkJson, ServicesJson, Format, ValidationStatus, ValidationMessage)
+        VALUES (@userId, @projectName, @resourceGroupName, @region, @networkJson, @servicesJson, @format, @validationStatus, @validationMessage)
       `);
     } else {
       await req.query(`
-        INSERT INTO dbo.Generations (ProjectName, ResourceGroupName, Region, NetworkJson, ServicesJson, Format)
-        VALUES (@projectName, @resourceGroupName, @region, @networkJson, @servicesJson, @format)
+        INSERT INTO dbo.Generations (ProjectName, ResourceGroupName, Region, NetworkJson, ServicesJson, Format, ValidationStatus, ValidationMessage)
+        VALUES (@projectName, @resourceGroupName, @region, @networkJson, @servicesJson, @format, @validationStatus, @validationMessage)
       `);
     }
   } catch (err) {
-    console.error('Failed to save generation to DB:', err);
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('ValidationStatus') || msg.includes('ValidationMessage') || msg.includes('Invalid column')) {
+      try {
+        const req2 = p.request()
+          .input('projectName', sql.NVarChar(256), config.projectName)
+          .input('resourceGroupName', sql.NVarChar(256), config.resourceGroupName)
+          .input('region', sql.NVarChar(64), config.region)
+          .input('networkJson', sql.NVarChar(sql.MAX as number), JSON.stringify(config.network))
+          .input('servicesJson', sql.NVarChar(sql.MAX as number), JSON.stringify(config.services))
+          .input('format', sql.NVarChar(32), format);
+        if (userId != null) {
+          req2.input('userId', sql.Int, userId);
+          await req2.query(`
+            INSERT INTO dbo.Generations (UserId, ProjectName, ResourceGroupName, Region, NetworkJson, ServicesJson, Format)
+            VALUES (@userId, @projectName, @resourceGroupName, @region, @networkJson, @servicesJson, @format)
+          `);
+        } else {
+          await req2.query(`
+            INSERT INTO dbo.Generations (ProjectName, ResourceGroupName, Region, NetworkJson, ServicesJson, Format)
+            VALUES (@projectName, @resourceGroupName, @region, @networkJson, @servicesJson, @format)
+          `);
+        }
+      } catch (err2) {
+        console.error('Failed to save generation to DB:', err2);
+      }
+    } else {
+      console.error('Failed to save generation to DB:', err);
+    }
   }
 }
 
 /**
  * Returns generations for a user (for "My generations" list). Empty array if DB not configured.
+ * If ValidationStatus/ValidationMessage columns are missing (migration not run), returns rows with null for those.
  */
 export async function getGenerationsByUserId(userId: number): Promise<GenerationRow[]> {
   const p = await getPool();
@@ -136,14 +173,32 @@ export async function getGenerationsByUserId(userId: number): Promise<Generation
     const result = await p.request()
       .input('userId', sql.Int, userId)
       .query(`
-        SELECT Id, ProjectName, ResourceGroupName, Region, Format, CreatedAt
+        SELECT Id, ProjectName, ResourceGroupName, Region, Format, CreatedAt, ValidationStatus, ValidationMessage
         FROM dbo.Generations
         WHERE UserId = @userId
         ORDER BY CreatedAt DESC
       `);
     const rows = (result as { recordset: GenerationRow[] }).recordset;
     return rows ?? [];
-  } catch (err) {
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('ValidationStatus') || msg.includes('ValidationMessage') || msg.includes('Invalid column')) {
+      try {
+        const fallback = await p.request()
+          .input('userId', sql.Int, userId)
+          .query(`
+            SELECT Id, ProjectName, ResourceGroupName, Region, Format, CreatedAt
+            FROM dbo.Generations
+            WHERE UserId = @userId
+            ORDER BY CreatedAt DESC
+          `);
+        const rows = (fallback as { recordset: (Omit<GenerationRow, 'ValidationStatus' | 'ValidationMessage'>)[] }).recordset;
+        return (rows ?? []).map((r) => ({ ...r, ValidationStatus: null, ValidationMessage: null }));
+      } catch {
+        console.error('getGenerationsByUserId:', err);
+        return [];
+      }
+    }
     console.error('getGenerationsByUserId:', err);
     return [];
   }

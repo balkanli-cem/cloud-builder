@@ -7,6 +7,7 @@ import os from 'os';
 import archiver from 'archiver';
 import { generateBicep } from './generators/bicep/index';
 import { generateTerraform } from './generators/terraform/index';
+import { validateBicep, validateTerraform } from './validation-iac';
 import { buildDefaultNetwork } from './core/network/defaults';
 import { SERVICE_CATALOG } from './core/services/catalog';
 import { saveGeneration, getGenerationsByUserId, getGenerationByIdAndUserId, deleteGenerationByIdAndUserId, checkDatabase } from './db/client';
@@ -155,6 +156,8 @@ app.get('/api/generations', authMiddleware, async (req, res) => {
       region: g.Region,
       format: g.Format,
       createdAt: g.CreatedAt,
+      validationStatus: g.ValidationStatus ?? null,
+      validationMessage: g.ValidationMessage ?? null,
     }));
     res.json({ generations });
   } catch (err) {
@@ -253,9 +256,10 @@ app.post('/api/generate', generateLimiter, authMiddleware, ...generateValidation
       await generateTerraform(config, tempDir);
     }
 
-    // Persist generation details to Azure SQL when connection string is set (linked to user)
+    const validation = format === 'bicep' ? validateBicep(tempDir) : validateTerraform(tempDir);
+
     const { user } = req as express.Request & { user: { email: string; userId: number } };
-    saveGeneration(config, format, user.userId).catch((err) => console.error('DB save:', err));
+    await saveGeneration(config, format, user.userId, validation);
 
     const archive = archiver('zip', { zlib: { level: 6 } });
     res.attachment(`${config.projectName}-${format}.zip`);
