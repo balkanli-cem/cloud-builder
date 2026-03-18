@@ -5,6 +5,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import os from 'os';
 import archiver from 'archiver';
+import { getLogger, baseLogger, requestIdMiddleware, setRequestUserId } from './logger';
 import { generateBicep } from './generators/bicep/index';
 import { generateTerraform } from './generators/terraform/index';
 import { validateBicep, validateTerraform } from './validation-iac';
@@ -28,6 +29,7 @@ const app = express();
 app.set('trust proxy', 1); // so req.ip is the client IP when behind Azure/nginx
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
+app.use(requestIdMiddleware);
 
 const PORT = process.env.PORT ?? 3000;
 const WEB_DIR = path.join(__dirname, '..', 'web-dist');
@@ -70,6 +72,7 @@ function authMiddleware(req: express.Request, res: express.Response, next: expre
     return;
   }
   (req as express.Request & { user: { email: string; userId: number } }).user = payload;
+  setRequestUserId(payload.userId);
   next();
 }
 
@@ -118,7 +121,7 @@ app.post('/api/forgot-password', authLimiter, ...forgotPasswordValidation, handl
   const result = await requestPasswordReset(email);
   if (result.ok) {
     if (process.env.NODE_ENV !== 'production') {
-      console.log('[forgot-password] Reset link (do not log in production):', result.resetLink);
+      getLogger().info({ resetLink: result.resetLink }, 'forgot-password: reset link (do not log in production)');
     }
     // TODO: send result.resetLink by email (e.g. SendGrid, Nodemailer) when configured
   }
@@ -161,7 +164,7 @@ app.get('/api/generations', authMiddleware, async (req, res) => {
     }));
     res.json({ generations });
   } catch (err) {
-    console.error('GET /api/generations:', err);
+    getLogger().error({ err }, 'GET /api/generations failed');
     res.status(500).json({ error: 'Failed to load generations.' });
   }
 });
@@ -202,7 +205,7 @@ app.get('/api/generations/:id/download', generateLimiter, ...generationIdParamVa
       services,
     };
   } catch (err) {
-    console.error('Download again: invalid stored JSON', err);
+    getLogger().error({ err }, 'Download again: invalid stored JSON');
     res.status(500).json({ error: 'Stored generation data is invalid.' });
     return;
   }
@@ -222,7 +225,7 @@ app.get('/api/generations/:id/download', generateLimiter, ...generationIdParamVa
     archive.directory(tempDir, false);
     await archive.finalize();
   } catch (err) {
-    console.error(err);
+    getLogger().error({ err }, 'Download again: generation failed');
     if (!res.headersSent) {
       res.status(500).json({ error: err instanceof Error ? err.message : 'Generation failed.' });
     }
@@ -268,7 +271,7 @@ app.post('/api/generate', generateLimiter, authMiddleware, ...generateValidation
     archive.directory(tempDir, false);
     await archive.finalize();
   } catch (err) {
-    console.error(err);
+    getLogger().error({ err }, 'POST /api/generate failed');
     if (!res.headersSent) {
       res.status(500).json({ error: err instanceof Error ? err.message : 'Generation failed.' });
     }
@@ -291,5 +294,5 @@ app.get('*', async (_req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Cloud Builder server at http://localhost:${PORT}`);
+  baseLogger.info({ port: PORT }, 'Cloud Builder server listening');
 });

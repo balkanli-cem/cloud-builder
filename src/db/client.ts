@@ -1,5 +1,6 @@
 import sql from 'mssql';
 import type { ProjectConfig } from '../types/index';
+import { getLogger } from '../logger';
 
 const CONNECTION_STRING = process.env.AZURE_SQL_CONNECTION_STRING;
 
@@ -12,7 +13,7 @@ async function getPool(): Promise<sql.ConnectionPool | null> {
     pool = await sql.connect(CONNECTION_STRING);
     return pool;
   } catch (err) {
-    console.error('DB connection failed:', err);
+    getLogger().error({ err }, 'DB connection failed');
     return null;
   }
 }
@@ -67,7 +68,7 @@ export async function getGenerationByIdAndUserId(id: number, userId: number): Pr
     const rows = (result as { recordset: GenerationFullRow[] }).recordset;
     return rows[0] ?? null;
   } catch (err) {
-    console.error('getGenerationByIdAndUserId:', err);
+    getLogger().error({ err }, 'getGenerationByIdAndUserId');
     return null;
   }
 }
@@ -86,7 +87,7 @@ export async function deleteGenerationByIdAndUserId(id: number, userId: number):
     const affected = (result as { rowsAffected: number[] }).rowsAffected;
     return Array.isArray(affected) && affected[0] > 0;
   } catch (err) {
-    console.error('deleteGenerationByIdAndUserId:', err);
+    getLogger().error({ err }, 'deleteGenerationByIdAndUserId');
     return false;
   }
 }
@@ -154,10 +155,10 @@ export async function saveGeneration(
           `);
         }
       } catch (err2) {
-        console.error('Failed to save generation to DB:', err2);
+        getLogger().error({ err: err2 }, 'Failed to save generation to DB (fallback insert)');
       }
     } else {
-      console.error('Failed to save generation to DB:', err);
+      getLogger().error({ err }, 'Failed to save generation to DB');
     }
   }
 }
@@ -195,11 +196,11 @@ export async function getGenerationsByUserId(userId: number): Promise<Generation
         const rows = (fallback as { recordset: (Omit<GenerationRow, 'ValidationStatus' | 'ValidationMessage'>)[] }).recordset;
         return (rows ?? []).map((r) => ({ ...r, ValidationStatus: null, ValidationMessage: null }));
       } catch {
-        console.error('getGenerationsByUserId:', err);
+        getLogger().error({ err }, 'getGenerationsByUserId (fallback)');
         return [];
       }
     }
-    console.error('getGenerationsByUserId:', err);
+    getLogger().error({ err }, 'getGenerationsByUserId');
     return [];
   }
 }
@@ -224,7 +225,7 @@ export async function findUserByEmail(email: string): Promise<UserRow | null> {
     const rows = (result as { recordset: UserRow[] }).recordset;
     return rows[0] ?? null;
   } catch (err) {
-    console.error('findUserByEmail:', err);
+    getLogger().error({ err }, 'findUserByEmail');
     return null;
   }
 }
@@ -248,7 +249,7 @@ export async function createUser(email: string, passwordHash: string, displayNam
     const rows = (result as { recordset: { Id: number }[] }).recordset;
     return rows[0]?.Id ?? null;
   } catch (err) {
-    console.error('createUser:', err);
+    getLogger().error({ err }, 'createUser');
     return null;
   }
 }
@@ -272,7 +273,7 @@ export async function setPasswordResetToken(email: string, tokenHash: string, ex
     const affected = (result as { rowsAffected: number[] }).rowsAffected;
     return Array.isArray(affected) && affected[0] > 0;
   } catch (err) {
-    console.error('setPasswordResetToken:', err);
+    getLogger().error({ err }, 'setPasswordResetToken');
     return false;
   }
 }
@@ -293,7 +294,7 @@ export async function findUserIdByResetToken(tokenHash: string): Promise<number 
     const rows = (result as { recordset: { Id: number }[] }).recordset;
     return rows[0]?.Id ?? null;
   } catch (err) {
-    console.error('findUserIdByResetToken:', err);
+    getLogger().error({ err }, 'findUserIdByResetToken');
     return null;
   }
 }
@@ -316,7 +317,7 @@ export async function updatePasswordAndClearResetToken(userId: number, passwordH
     const affected = (result as { rowsAffected: number[] }).rowsAffected;
     return Array.isArray(affected) && affected[0] > 0;
   } catch (err) {
-    console.error('updatePasswordAndClearResetToken:', err);
+    getLogger().error({ err }, 'updatePasswordAndClearResetToken');
     return false;
   }
 }
