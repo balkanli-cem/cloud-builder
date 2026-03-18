@@ -9,7 +9,7 @@ import { Register } from './steps/Register';
 import { ForgotPassword } from './steps/ForgotPassword';
 import { ResetPassword } from './steps/ResetPassword';
 import { Dashboard } from './steps/Dashboard';
-import { InfoIcon } from './components/InfoIcon';
+import { HelpPage } from './steps/HelpPage';
 
 const AUTH_TOKEN_KEY = 'cloud-builder-token';
 
@@ -23,11 +23,22 @@ function authHeaders(token: string): HeadersInit {
   return { Authorization: `Bearer ${token}` };
 }
 
+const headerLinkStyle: React.CSSProperties = {
+  padding: '0.25rem 0.5rem',
+  background: 'transparent',
+  border: '1px solid #475569',
+  borderRadius: '4px',
+  color: '#94a3b8',
+  fontSize: '0.8125rem',
+  cursor: 'pointer',
+};
+
 export default function App() {
   const [token, setTokenState] = useState<string | null>(() => localStorage.getItem(AUTH_TOKEN_KEY));
   const [view, setView] = useState<'dashboard' | 'wizard'>('dashboard');
   const [showRegister, setShowRegister] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const [resetTokenFromUrl, setResetTokenFromUrl] = useState<string | null>(() =>
     typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('token') : null
   );
@@ -95,14 +106,38 @@ export default function App() {
       window.history.replaceState({}, '', window.location.pathname || '/');
       setResetTokenFromUrl(null);
     };
+    if (showHelp) {
+      return (
+        <>
+          <header style={{ marginBottom: '2rem', textAlign: 'center' }}>
+            <h1 style={{ fontSize: '1.75rem', fontWeight: 700, margin: 0 }}>Cloud Builder</h1>
+            <p style={{ color: '#94a3b8', marginTop: '0.25rem' }}>Azure infrastructure wizard</p>
+          </header>
+          <HelpPage onBack={() => setShowHelp(false)} />
+        </>
+      );
+    }
     return (
       <>
         <header style={{ marginBottom: '2rem', textAlign: 'center' }}>
           <h1 style={{ fontSize: '1.75rem', fontWeight: 700, margin: 0 }}>Cloud Builder</h1>
-          <p style={{ color: '#94a3b8', marginTop: '0.25rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: '0.25rem' }}>
-            Azure infrastructure wizard
-            <InfoIcon text="Design a virtual network and Azure services (VMs, VMSS, etc.) in a few steps, then download ready-to-deploy Bicep or Terraform code. Sign in to save your generations and access them later." placement="below" />
-          </p>
+          <p style={{ color: '#94a3b8', marginTop: '0.25rem' }}>Azure infrastructure wizard</p>
+          <button
+            type="button"
+            onClick={() => setShowHelp(true)}
+            style={{
+              marginTop: '0.5rem',
+              padding: '0.25rem 0.5rem',
+              background: 'transparent',
+              border: '1px solid #475569',
+              borderRadius: '4px',
+              color: '#94a3b8',
+              fontSize: '0.8125rem',
+              cursor: 'pointer',
+            }}
+          >
+            Help
+          </button>
         </header>
         {resetTokenFromUrl ? (
           <ResetPassword
@@ -128,31 +163,32 @@ export default function App() {
     );
   }
 
+  if (token && showHelp) {
+    return (
+      <>
+        <header style={{ marginBottom: '2rem', textAlign: 'center' }}>
+          <h1 style={{ fontSize: '1.75rem', fontWeight: 700, margin: 0 }}>Cloud Builder</h1>
+          <p style={{ color: '#94a3b8', marginTop: '0.25rem' }}>Azure infrastructure wizard</p>
+          <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button type="button" onClick={() => setShowHelp(false)} style={headerLinkStyle}>← Back</button>
+            <button type="button" onClick={() => { setShowHelp(false); setView('dashboard'); }} style={headerLinkStyle}>My generations</button>
+            <button type="button" onClick={logout} style={headerLinkStyle}>Sign out</button>
+          </div>
+        </header>
+        <HelpPage onBack={() => setShowHelp(false)} />
+      </>
+    );
+  }
   if (token && view === 'dashboard') {
     return (
       <>
         <header style={{ marginBottom: '2rem', textAlign: 'center' }}>
           <h1 style={{ fontSize: '1.75rem', fontWeight: 700, margin: 0 }}>Cloud Builder</h1>
-          <p style={{ color: '#94a3b8', marginTop: '0.25rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: '0.25rem' }}>
-            Azure infrastructure wizard
-            <InfoIcon text="Design a virtual network and Azure services (VMs, VMSS, etc.) in a few steps, then download ready-to-deploy Bicep or Terraform code. Sign in to save your generations and access them later." placement="below" />
-          </p>
-          <button
-            type="button"
-            onClick={logout}
-            style={{
-              marginTop: '0.5rem',
-              padding: '0.25rem 0.5rem',
-              background: 'transparent',
-              border: '1px solid #475569',
-              borderRadius: '4px',
-              color: '#94a3b8',
-              fontSize: '0.8125rem',
-              cursor: 'pointer',
-            }}
-          >
-            Sign out
-          </button>
+          <p style={{ color: '#94a3b8', marginTop: '0.25rem' }}>Azure infrastructure wizard</p>
+          <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button type="button" onClick={() => setShowHelp(true)} style={headerLinkStyle}>Help</button>
+            <button type="button" onClick={logout} style={headerLinkStyle}>Sign out</button>
+          </div>
         </header>
         <Dashboard token={token} onGenerateNew={() => setView('wizard')} />
       </>
@@ -163,43 +199,12 @@ export default function App() {
     <>
       <header style={{ marginBottom: '2rem', textAlign: 'center' }}>
         <h1 style={{ fontSize: '1.75rem', fontWeight: 700, margin: 0 }}>Cloud Builder</h1>
-        <p style={{ color: '#94a3b8', marginTop: '0.25rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: '0.25rem' }}>
-          Azure infrastructure wizard
-          <InfoIcon text="Design a virtual network and Azure services (VMs, VMSS, etc.) in a few steps, then download ready-to-deploy Bicep or Terraform code. Sign in to save your generations and access them later." placement="below" />
-        </p>
-        <button
-          type="button"
-          onClick={goToDashboard}
-          style={{
-            marginTop: '0.5rem',
-            marginRight: '0.5rem',
-            padding: '0.25rem 0.5rem',
-            background: 'transparent',
-            border: '1px solid #475569',
-            borderRadius: '4px',
-            color: '#94a3b8',
-            fontSize: '0.8125rem',
-            cursor: 'pointer',
-          }}
-        >
-          My generations
-        </button>
-        <button
-          type="button"
-          onClick={logout}
-          style={{
-            marginTop: '0.5rem',
-            padding: '0.25rem 0.5rem',
-            background: 'transparent',
-            border: '1px solid #475569',
-            borderRadius: '4px',
-            color: '#94a3b8',
-            fontSize: '0.8125rem',
-            cursor: 'pointer',
-          }}
-        >
-          Sign out
-        </button>
+        <p style={{ color: '#94a3b8', marginTop: '0.25rem' }}>Azure infrastructure wizard</p>
+        <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+          <button type="button" onClick={() => setShowHelp(true)} style={headerLinkStyle}>Help</button>
+          <button type="button" onClick={goToDashboard} style={headerLinkStyle}>My generations</button>
+          <button type="button" onClick={logout} style={headerLinkStyle}>Sign out</button>
+        </div>
       </header>
 
       {step === 1 && (

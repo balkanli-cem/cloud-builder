@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { InfoIcon } from '../components/InfoIcon';
 
 const formStyle: React.CSSProperties = {
   maxWidth: '20rem',
@@ -82,11 +81,7 @@ export function Login({ onLogin, onGoRegister, onForgotPassword }: Props) {
 
   return (
     <form onSubmit={handleSubmit} style={formStyle}>
-      <h2 style={{ fontSize: '1.125rem', marginBottom: '0.25rem', textAlign: 'center' }}>Sign in</h2>
-      <p style={{ color: '#94a3b8', fontSize: '0.8125rem', marginBottom: '1rem', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem' }}>
-        Access your saved generations
-        <InfoIcon text="Sign in to see your past Bicep and Terraform generations, download them again in either format, or delete them. Your data is stored securely and linked to your account." />
-      </p>
+      <h2 style={{ fontSize: '1.125rem', marginBottom: '1rem', textAlign: 'center' }}>Sign in</h2>
       <label style={labelStyle}>Email</label>
       <input
         type="email"
