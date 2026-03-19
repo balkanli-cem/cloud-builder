@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
+import { securityHeadersMiddleware } from './securityHeaders';
 import path from 'path';
 import fs from 'fs/promises';
 import os from 'os';
@@ -27,6 +28,7 @@ import type { ProjectConfig } from './types/index';
 
 const app = express();
 app.set('trust proxy', 1); // so req.ip is the client IP when behind Azure/nginx
+app.use(securityHeadersMiddleware());
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 app.use(requestIdMiddleware);
