@@ -59,9 +59,15 @@ export interface ProjectConfig {
   services: AzureService[];
 }
 
+/** Matches backend catalog: shared VNet subnet required vs optional (e.g. AKS managed networking). */
+export type ServiceNetworkMode = 'subnet_required' | 'subnet_optional';
+
 export interface ServiceEntry {
   type: AzureServiceType;
   label: string;
   description: string;
   defaultSubnet: string;
+  networkMode: ServiceNetworkMode;
+  /** How this service connects to others (UI hint). */
+  integrationNotes?: string;
 }

@@ -1,5 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { body, param, query, validationResult, type ValidationChain } from 'express-validator';
+import type { ProjectConfig } from './types/index';
+import { getNetworkMode, serviceUsesSharedSubnet } from './core/services/networkPolicy';
 
 /**
  * Sends 400 with validation errors. Use after running validation chains.
@@ -137,3 +139,29 @@ export const downloadFormatQueryValidation: ValidationChain[] = [
     .isIn(['bicep', 'terraform'])
     .withMessage('format must be "bicep" or "terraform"'),
 ];
+
+/**
+ * Semantic checks after express-validator (subnet placement vs catalog network mode).
+ */
+export function validateGenerateConfigBody(config: ProjectConfig): string | null {
+  const subnetNames = new Set(config.network.subnets.map((s) => s.name));
+  if (config.network.subnets.length === 0) {
+    return 'network.subnets must include at least one subnet.';
+  }
+  for (const svc of config.services) {
+    const mode = getNetworkMode(svc.type);
+    if (mode === 'subnet_required') {
+      const placement = svc.subnetPlacement;
+      if (!placement || !subnetNames.has(String(placement))) {
+        return `Service "${svc.name}" (${svc.type}) must use a subnet from your network design.`;
+      }
+    }
+    if (serviceUsesSharedSubnet(svc)) {
+      const placement = svc.subnetPlacement;
+      if (!placement || !subnetNames.has(String(placement))) {
+        return `Service "${svc.name}": pick a valid subnet for the shared VNet, or switch to managed networking where available.`;
+      }
+    }
+  }
+  return null;
+}

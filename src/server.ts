@@ -23,6 +23,7 @@ import {
   generateValidation,
   generationIdParamValidation,
   downloadFormatQueryValidation,
+  validateGenerateConfigBody,
 } from './validation';
 import type { ProjectConfig } from './types/index';
 
@@ -249,7 +250,22 @@ app.get('/api/default-network/:projectName', authMiddleware, (req, res) => {
 });
 
 // Generate IaC and return as ZIP (protected, rate limited, validated)
-app.post('/api/generate', generateLimiter, authMiddleware, ...generateValidation, handleValidationErrors, async (req: express.Request, res: express.Response) => {
+app.post(
+  '/api/generate',
+  generateLimiter,
+  authMiddleware,
+  ...generateValidation,
+  handleValidationErrors,
+  (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const { config } = req.body as { config: ProjectConfig };
+    const msg = validateGenerateConfigBody(config);
+    if (msg) {
+      res.status(400).json({ error: msg });
+      return;
+    }
+    next();
+  },
+  async (req: express.Request, res: express.Response) => {
   const { config, format } = req.body as { config: ProjectConfig; format: 'bicep' | 'terraform' };
 
   let tempDir: string | null = null;
@@ -282,7 +298,8 @@ app.post('/api/generate', generateLimiter, authMiddleware, ...generateValidation
       await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
     }
   }
-});
+},
+);
 
 // SPA fallback (only if built)
 app.get('*', async (_req, res) => {

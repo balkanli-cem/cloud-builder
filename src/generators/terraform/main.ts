@@ -69,15 +69,20 @@ ${vmVariables}
 `;
 }
 
-export function renderOutputsTf(): string {
+export function renderOutputsTf(includeSharedNetwork: boolean): string {
+  const vnetOutput = includeSharedNetwork
+    ? `
+output "vnet_id" {
+  description = "Resource ID of the virtual network (only when the deployment includes a shared VNet)."
+  value       = azurerm_virtual_network.main.id
+}
+`
+    : `
+# No shared VNet in this deployment — vnet_id output omitted.
+`;
   return `output "resource_group_name" {
   description = "Name of the provisioned resource group."
   value       = azurerm_resource_group.main.name
 }
-
-output "vnet_id" {
-  description = "Resource ID of the virtual network."
-  value       = azurerm_virtual_network.main.id
-}
-`;
+${vnetOutput}`;
 }

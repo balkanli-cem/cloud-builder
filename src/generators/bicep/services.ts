@@ -55,11 +55,15 @@ output defaultHostname string = webApp.properties.defaultHostName
 }
 
 // ─── AKS ──────────────────────────────────────────────────────────────────────
+// attachToSubnet: false = Kubenet, cluster-managed networking (no wizard VNet).
+// attachToSubnet: true = Azure CNI + subnet from shared VNet module.
 
 function aks(): string {
   return `param location string
 param name string
-param subnetId string
+@description('When true, use Azure CNI with the provided subnet; when false, use Kubenet (no shared VNet subnet).')
+param attachToSubnet bool
+param subnetId string = ''
 
 resource aks 'Microsoft.ContainerService/managedClusters@2024-02-01' = {
   name: name
@@ -69,11 +73,13 @@ resource aks 'Microsoft.ContainerService/managedClusters@2024-02-01' = {
   }
   properties: {
     dnsPrefix: name
-    networkProfile: {
+    networkProfile: attachToSubnet ? {
       networkPlugin: 'azure'
       networkPolicy: 'azure'
+    } : {
+      networkPlugin: 'kubenet'
     }
-    agentPoolProfiles: [
+    agentPoolProfiles: attachToSubnet ? [
       {
         name: 'nodepool1'
         count: 3
@@ -81,6 +87,14 @@ resource aks 'Microsoft.ContainerService/managedClusters@2024-02-01' = {
         osType: 'Linux'
         mode: 'System'
         vnetSubnetID: subnetId
+      }
+    ] : [
+      {
+        name: 'nodepool1'
+        count: 3
+        vmSize: 'Standard_DS2_v2'
+        osType: 'Linux'
+        mode: 'System'
       }
     ]
   }

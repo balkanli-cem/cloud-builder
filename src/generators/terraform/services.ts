@@ -1,7 +1,11 @@
 import type { AzureService, VMConfig, VMSSConfig } from '../../types/index';
+import { serviceUsesSharedSubnet } from '../../core/services/networkPolicy';
 import { toTfId } from './network';
 
 function getSubnetRef(svc: AzureService): string {
+  if (!serviceUsesSharedSubnet(svc)) {
+    throw new Error(`getSubnetRef called for service without shared subnet: ${svc.type} ${svc.name}`);
+  }
   return svc.subnetPlacement
     ? `azurerm_subnet.${toTfId(svc.subnetPlacement)}.id`
     : 'azurerm_subnet.backend.id';
@@ -10,26 +14,26 @@ function getSubnetRef(svc: AzureService): string {
 export function renderServiceTerraform(services: AzureService[]): string {
   if (services.length === 0) return '';
 
-  const type = services[0].type;
-  const blocks = services.map(svc => {
+  const blocks = services.map((svc) => {
     const id = toTfId(svc.name);
-    const sub = getSubnetRef(svc);
     const config = (svc.config || {}) as Record<string, unknown>;
-    switch (type) {
-      case 'app-service':     return appService(id, svc.name, sub);
+    const sub = serviceUsesSharedSubnet(svc) ? getSubnetRef(svc) : null;
+    switch (svc.type) {
+      case 'app-service':     return appService(id, svc.name, sub!);
       case 'aks':             return aks(id, svc.name, sub);
-      case 'azure-sql':       return azureSql(id, svc.name, sub);
-      case 'cosmos-db':       return cosmosDb(id, svc.name, sub);
-      case 'storage-account': return storageAccount(id, svc.name, sub);
-      case 'key-vault':       return keyVault(id, svc.name, sub);
-      case 'api-management':  return apiManagement(id, svc.name, sub);
-      case 'container-apps':  return containerApps(id, svc.name, sub);
-      case 'vm':              return vm(id, svc.name, sub, config as VMConfig);
-      case 'vmss':            return vmss(id, svc.name, sub, config as VMSSConfig);
+      case 'azure-sql':       return azureSql(id, svc.name, sub!);
+      case 'cosmos-db':       return cosmosDb(id, svc.name, sub!);
+      case 'storage-account': return storageAccount(id, svc.name, sub!);
+      case 'key-vault':       return keyVault(id, svc.name, sub!);
+      case 'api-management':  return apiManagement(id, svc.name, sub!);
+      case 'container-apps':  return containerApps(id, svc.name, sub!);
+      case 'vm':              return vm(id, svc.name, sub!, config as VMConfig);
+      case 'vmss':            return vmss(id, svc.name, sub!, config as VMSSConfig);
     }
   });
   // Key Vault needs the client config data block once per file, not per instance
-  const prefix = type === 'key-vault' ? keyVaultDataBlock() : '';
+  const fileType = services[0]?.type;
+  const prefix = fileType === 'key-vault' ? keyVaultDataBlock() : '';
   return prefix + blocks.join('\n\n');
 }
 
@@ -66,8 +70,9 @@ output "${id}_hostname" {
 
 // ─── AKS ──────────────────────────────────────────────────────────────────────
 
-function aks(id: string, name: string, subnetRef: string): string {
-  return `resource "azurerm_kubernetes_cluster" "${id}" {
+function aks(id: string, name: string, subnetRef: string | null): string {
+  if (subnetRef) {
+    return `resource "azurerm_kubernetes_cluster" "${id}" {
   name                = "${name}"
   location            = azurerm_resource_group.main.location
   resource_group_name = azurerm_resource_group.main.name
@@ -87,6 +92,33 @@ function aks(id: string, name: string, subnetRef: string): string {
   network_profile {
     network_plugin = "azure"
     network_policy = "azure"
+  }
+}
+
+output "${id}_kube_config" {
+  value     = azurerm_kubernetes_cluster.${id}.kube_config_raw
+  sensitive = true
+}
+`;
+  }
+  return `resource "azurerm_kubernetes_cluster" "${id}" {
+  name                = "${name}"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  dns_prefix          = "${name}"
+
+  default_node_pool {
+    name       = "nodepool1"
+    node_count = 3
+    vm_size    = "Standard_DS2_v2"
+  }
+
+  identity {
+    type = "SystemAssigned"
+  }
+
+  network_profile {
+    network_plugin = "kubenet"
   }
 }
 

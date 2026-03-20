@@ -1,12 +1,18 @@
 import type { ProjectConfig, AzureService, VMConfig, VMSSConfig } from '../../types/index';
+import { projectUsesSharedNetwork, serviceUsesSharedSubnet } from '../../core/services/networkPolicy';
 
 function subnetRef(svc: AzureService, config: ProjectConfig): string {
   return svc.subnetPlacement
     ? `network.outputs.subnetIds['${svc.subnetPlacement}']`
-    : `network.outputs.subnetIds['${config.network.subnets[0].name}']`;
+    : `network.outputs.subnetIds['${config.network.subnets[0]?.name ?? 'Backend'}']`;
+}
+
+function networkDependsOn(svc: AzureService): string {
+  return serviceUsesSharedSubnet(svc) ? 'dependsOn: [network]\n  ' : '';
 }
 
 export function renderMainBicep(config: ProjectConfig): string {
+  const includeNetwork = projectUsesSharedNetwork(config.services);
   const subnetArray = config.network.subnets
     .map(s => `      {\n        name: '${s.name}'\n        addressPrefix: '${s.addressPrefix}'\n      }`)
     .join('\n');
@@ -17,7 +23,22 @@ export function renderMainBicep(config: ProjectConfig): string {
 
   const moduleBlocks = config.services
     .map(svc => {
+      const usesShared = serviceUsesSharedSubnet(svc);
       const subnetRefStr = subnetRef(svc, config);
+      const dep = networkDependsOn(svc);
+
+      if (svc.type === 'aks') {
+        const attach = usesShared;
+        return `module ${toIdentifier(svc.name)} './modules/${svc.type}.bicep' = {
+  name: '${svc.name}-deployment'
+  ${dep}params: {
+    location: location
+    name: '${svc.name}'
+    attachToSubnet: ${attach}
+    subnetId: ${attach ? subnetRefStr : "''"}
+  }
+}`;
+      }
       if (svc.type === 'vm') {
         const c = (svc.config || {}) as VMConfig;
         const enablePublicIp = c.enablePublicIp !== false;
@@ -28,8 +49,7 @@ export function renderMainBicep(config: ProjectConfig): string {
         const osDiskSizeGb = c.osDiskSizeGb ?? 30;
         return `module ${toIdentifier(svc.name)} './modules/${svc.type}.bicep' = {
   name: '${svc.name}-deployment'
-  dependsOn: [network]
-  params: {
+  ${dep}params: {
     location: location
     name: '${svc.name}'
     subnetId: ${subnetRefStr}
@@ -54,8 +74,7 @@ export function renderMainBicep(config: ProjectConfig): string {
         const scaleInCpuPercent = c.scaleInCpuPercent ?? 30;
         return `module ${toIdentifier(svc.name)} './modules/${svc.type}.bicep' = {
   name: '${svc.name}-deployment'
-  dependsOn: [network]
-  params: {
+  ${dep}params: {
     location: location
     name: '${svc.name}'
     subnetId: ${subnetRefStr}
@@ -72,8 +91,7 @@ export function renderMainBicep(config: ProjectConfig): string {
       }
       return `module ${toIdentifier(svc.name)} './modules/${svc.type}.bicep' = {
   name: '${svc.name}-deployment'
-  dependsOn: [network]
-  params: {
+  ${dep}params: {
     location: location
     name: '${svc.name}'
     subnetId: ${subnetRefStr}
@@ -91,12 +109,9 @@ param adminPasswordOrKey string
 `
       : '';
 
-  return `targetScope = 'resourceGroup'
-
-@description('Azure region for all resources.')
-param location string = '${config.region}'${secureParamBlock}
-
-// ─── Network ──────────────────────────────────────────────────────────────────
+  const networkBlock = includeNetwork
+    ? `
+// ─── Shared virtual network (only when at least one service uses it) ─────────
 
 module network './modules/network.bicep' = {
   name: 'network-deployment'
@@ -109,7 +124,16 @@ ${subnetArray}
     ]
   }
 }
+`
+    : `
+// No shared VNet module: all services use managed networking or do not require this VNet.
+`;
 
+  return `targetScope = 'resourceGroup'
+
+@description('Azure region for all resources.')
+param location string = '${config.region}'${secureParamBlock}
+${networkBlock}
 // ─── Services ─────────────────────────────────────────────────────────────────
 
 ${moduleBlocks}

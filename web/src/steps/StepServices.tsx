@@ -25,6 +25,8 @@ export function StepServices({
   const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set());
   const [names, setNames] = useState<Record<string, string>>({});
   const [subnets, setSubnets] = useState<Record<string, string>>({});
+  /** For subnet_optional services: managed = omit subnetPlacement (e.g. AKS Kubenet). */
+  const [networkChoices, setNetworkChoices] = useState<Record<string, 'managed' | 'shared'>>({});
   const [configs, setConfigs] = useState<Record<string, Record<string, unknown>>>({});
 
   useEffect(() => {
@@ -38,9 +40,17 @@ export function StepServices({
     const entry = catalog.find((c) => c.type === type);
     if (next.has(type)) {
       next.delete(type);
+      setNetworkChoices((c) => {
+        const copy = { ...c };
+        delete copy[type];
+        return copy;
+      });
     } else {
       next.add(type);
       if (!names[type]) setNames((n) => ({ ...n, [type]: `${projectName}-${type}` }));
+      if (entry?.networkMode === 'subnet_optional') {
+        setNetworkChoices((c) => ({ ...c, [type]: 'managed' }));
+      }
       if (!subnets[type] && entry) {
         const defaultSub = subnetNames.includes(entry.defaultSubnet) ? entry.defaultSubnet : subnetNames[0];
         setSubnets((s) => ({ ...s, [type]: defaultSub }));
@@ -58,16 +68,22 @@ export function StepServices({
   const buildServices = (): AzureService[] =>
     Array.from(selectedTypes).map((type) => {
       const name = names[type] || `${projectName}-${type}`;
+      const entry = catalog.find((c) => c.type === type);
       const config: Record<string, unknown> =
         type === 'vm' ? ((configs[type] as VMConfig) || defaultVMConfig(name)) as Record<string, unknown>
         : type === 'vmss' ? ((configs[type] as VMSSConfig) || defaultVMSSConfig(name)) as Record<string, unknown>
         : {};
-      return {
+      const optionalManaged =
+        entry?.networkMode === 'subnet_optional' && (networkChoices[type] ?? 'managed') === 'managed';
+      const base: AzureService = {
         type: type as AzureService['type'],
         name,
-        subnetPlacement: subnets[type] || subnetNames[0],
         config,
       };
+      if (!optionalManaged) {
+        base.subnetPlacement = subnets[type] || subnetNames[0];
+      }
+      return base;
     });
 
   const handleNext = () => {
@@ -81,19 +97,26 @@ export function StepServices({
     <section>
       <h2 style={{ fontSize: '1.125rem', marginBottom: '1rem' }}>Services</h2>
       <p style={{ color: '#94a3b8', marginBottom: '1rem', fontSize: '0.875rem' }}>
-        Select Azure services. Each gets a resource name and subnet.
+        Select Azure services. Most use a subnet from your network design; some (e.g. AKS) can use managed networking instead.
       </p>
       <div style={{ marginBottom: '1rem' }}>
         {catalog.map((entry) => (
-          <label key={entry.type} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-            <input
-              type="checkbox"
-              checked={selectedTypes.has(entry.type)}
-              onChange={() => toggleService(entry.type)}
-            />
-            <span>{entry.label}</span>
-            <span style={{ color: '#64748b', fontSize: '0.8125rem' }}>{entry.description}</span>
-          </label>
+          <div key={entry.type} style={{ marginBottom: '0.75rem' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: entry.integrationNotes ? '0.25rem' : 0 }}>
+              <input
+                type="checkbox"
+                checked={selectedTypes.has(entry.type)}
+                onChange={() => toggleService(entry.type)}
+              />
+              <span>{entry.label}</span>
+              <span style={{ color: '#64748b', fontSize: '0.8125rem' }}>{entry.description}</span>
+            </label>
+            {entry.integrationNotes && (
+              <div style={{ marginLeft: '1.5rem', fontSize: '0.75rem', color: '#64748b', maxWidth: '42rem' }}>
+                {entry.integrationNotes}
+              </div>
+            )}
+          </div>
         ))}
       </div>
       {selectedTypes.size > 0 && (
@@ -115,18 +138,45 @@ export function StepServices({
                   placeholder="e.g. my-app-vmss"
                   style={inputStyle}
                 />
-                <label style={{ display: 'block', marginTop: '0.5rem', marginBottom: '0.25rem', fontSize: '0.875rem', color: '#94a3b8' }}>
-                  Subnet
-                </label>
-                <select
-                  value={subnets[type] ?? ''}
-                  onChange={(e) => setSubnets((s) => ({ ...s, [type]: e.target.value }))}
-                  style={{ ...inputStyle }}
-                >
-                  {subnetNames.map((sn) => (
-                    <option key={sn} value={sn}>{sn}</option>
-                  ))}
-                </select>
+                {entry?.networkMode === 'subnet_optional' && (
+                  <div style={{ marginTop: '0.5rem', marginBottom: '0.5rem' }}>
+                    <div style={{ fontSize: '0.8125rem', color: '#94a3b8', marginBottom: '0.35rem' }}>Networking</div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
+                      <input
+                        type="radio"
+                        name={`net-${type}`}
+                        checked={(networkChoices[type] ?? 'managed') === 'managed'}
+                        onChange={() => setNetworkChoices((c) => ({ ...c, [type]: 'managed' }))}
+                      />
+                      <span style={{ fontSize: '0.875rem' }}>Managed — cluster creates its own networking (Kubenet; wizard VNet not used for this cluster)</span>
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <input
+                        type="radio"
+                        name={`net-${type}`}
+                        checked={(networkChoices[type] ?? 'managed') === 'shared'}
+                        onChange={() => setNetworkChoices((c) => ({ ...c, [type]: 'shared' }))}
+                      />
+                      <span style={{ fontSize: '0.875rem' }}>Use shared VNet subnet (Azure CNI)</span>
+                    </label>
+                  </div>
+                )}
+                {((entry?.networkMode !== 'subnet_optional') || (networkChoices[type] ?? 'managed') === 'shared') && (
+                  <>
+                    <label style={{ display: 'block', marginTop: '0.5rem', marginBottom: '0.25rem', fontSize: '0.875rem', color: '#94a3b8' }}>
+                      Subnet
+                    </label>
+                    <select
+                      value={subnets[type] ?? ''}
+                      onChange={(e) => setSubnets((s) => ({ ...s, [type]: e.target.value }))}
+                      style={{ ...inputStyle }}
+                    >
+                      {subnetNames.map((sn) => (
+                        <option key={sn} value={sn}>{sn}</option>
+                      ))}
+                    </select>
+                  </>
+                )}
                 {type === 'vm' && (
                   <VMConfigForm
                     config={(configs[type] as VMConfig) || defaultVMConfig(name)}
