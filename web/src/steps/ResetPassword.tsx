@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { errorMessageFromApi } from '../rateLimitMessage';
 
 const formStyle: React.CSSProperties = {
   maxWidth: '20rem',
@@ -76,7 +77,7 @@ export function ResetPassword({ token, onSuccess, onBackToLogin }: Props) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data.error || 'Reset failed.');
+        setError(errorMessageFromApi(res, data, 'Reset failed.'));
         return;
       }
       setDone(true);

@@ -10,6 +10,7 @@ import { ForgotPassword } from './steps/ForgotPassword';
 import { ResetPassword } from './steps/ResetPassword';
 import { Dashboard } from './steps/Dashboard';
 import { HelpPage } from './steps/HelpPage';
+import { errorMessageFromApi } from './rateLimitMessage';
 
 const AUTH_TOKEN_KEY = 'cloud-builder-token';
 
@@ -258,7 +259,7 @@ export default function App() {
               });
               if (!res.ok) {
                 const data = await res.json().catch(() => ({}));
-                throw new Error(data.error || res.statusText);
+                throw new Error(errorMessageFromApi(res, data, res.statusText));
               }
               const blob = await res.blob();
               const url = URL.createObjectURL(blob);

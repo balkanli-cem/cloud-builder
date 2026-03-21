@@ -26,11 +26,16 @@ import {
   validateGenerateConfigBody,
 } from './validation';
 import type { ProjectConfig } from './types/index';
+import { rateLimit429JsonHandler } from './rateLimitHandler';
 
 const app = express();
 app.set('trust proxy', 1); // so req.ip is the client IP when behind Azure/nginx
 app.use(securityHeadersMiddleware());
-app.use(cors());
+app.use(
+  cors({
+    exposedHeaders: ['Retry-After', 'RateLimit-Limit', 'RateLimit-Remaining', 'RateLimit-Reset', 'RateLimit-Policy'],
+  }),
+);
 app.use(express.json({ limit: '1mb' }));
 app.use(requestIdMiddleware);
 
@@ -49,8 +54,11 @@ const authLimiter = rateLimit({
   windowMs: WINDOW_MS,
   max: 10,
   message: { error: 'Too many attempts. Please try again later.' },
-  standardHeaders: true,  // X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset
+  standardHeaders: true, // RateLimit-* + Retry-After when limited
   legacyHeaders: false,
+  handler: rateLimit429JsonHandler({
+    message: 'Too many attempts. Please try again later.',
+  }),
 });
 
 /** Generate: cap heavy requests per IP so one client cannot overload the server. */
@@ -60,6 +68,9 @@ const generateLimiter = rateLimit({
   message: { error: 'Too many generations. Please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
+  handler: rateLimit429JsonHandler({
+    message: 'Too many generations. Please try again later.',
+  }),
 });
 
 function authMiddleware(req: express.Request, res: express.Response, next: express.NextFunction): void {

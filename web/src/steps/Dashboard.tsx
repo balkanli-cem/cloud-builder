@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { errorMessageFromApi } from '../rateLimitMessage';
 
 export interface Generation {
   id: number;
@@ -63,7 +64,7 @@ async function downloadGeneration(token: string, id: number, projectName: string
   const res = await fetch(`/api/generations/${id}/download?format=${format}`, { headers: authHeaders(token) });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || res.statusText);
+    throw new Error(errorMessageFromApi(res, data, res.statusText));
   }
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);

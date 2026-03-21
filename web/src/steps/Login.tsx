@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { errorMessageFromApi } from '../rateLimitMessage';
 
 const formStyle: React.CSSProperties = {
   maxWidth: '20rem',
@@ -67,7 +68,7 @@ export function Login({ onLogin, onGoRegister, onForgotPassword }: Props) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data.error || 'Login failed.');
+        setError(errorMessageFromApi(res, data, 'Login failed.'));
         return;
       }
       if (data.token) onLogin(data.token);

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { errorMessageFromApi } from '../rateLimitMessage';
 
 const formStyle: React.CSSProperties = {
   maxWidth: '20rem',
@@ -75,7 +76,7 @@ export function Register({ onRegistered, onGoLogin }: Props) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data.error || 'Registration failed.');
+        setError(errorMessageFromApi(res, data, 'Registration failed.'));
         return;
       }
       onRegistered();
