@@ -58,7 +58,15 @@ export default function App() {
     setTokenState(t);
     localStorage.setItem(AUTH_TOKEN_KEY, t);
   }, []);
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    const t = localStorage.getItem(AUTH_TOKEN_KEY);
+    if (t) {
+      try {
+        await fetch('/api/logout', { method: 'POST', headers: { Authorization: `Bearer ${t}` } });
+      } catch {
+        /* ignore — still clear client session */
+      }
+    }
     setTokenState(null);
     localStorage.removeItem(AUTH_TOKEN_KEY);
     setView('dashboard');

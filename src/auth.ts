@@ -1,14 +1,29 @@
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { findUserByEmail, createUser, setPasswordResetToken, findUserIdByResetToken, updatePasswordAndClearResetToken } from './db/client';
+import {
+  findUserByEmail,
+  createUser,
+  setPasswordResetToken,
+  findUserIdByResetToken,
+  updatePasswordAndClearResetToken,
+  createSession,
+  recordLoginEvent,
+} from './db/client';
 
 const JWT_SECRET = process.env.JWT_SECRET ?? 'cloud-builder-dev-secret-change-in-production';
 const SALT_ROUNDS = 10;
 
+/** Set when AZURE_SQL_CONNECTION_STRING is configured (sessions + login audit in DB). */
+function hasAuthDatabase(): boolean {
+  return !!process.env.AZURE_SQL_CONNECTION_STRING;
+}
+
 export interface TokenPayload {
   email: string;
   userId: number;
+  /** Session id (JWT jti) when DB-backed sessions are enabled. */
+  jti?: string;
 }
 
 export function signToken(payload: TokenPayload): string {
@@ -46,7 +61,11 @@ export async function register(email: string, password: string, displayName?: st
   return { ok: true, userId };
 }
 
-export async function login(email: string, password: string): Promise<{ ok: true; token: string; email: string } | { ok: false; error: string }> {
+export async function login(
+  email: string,
+  password: string,
+  meta?: { ip?: string | null; userAgent?: string | null },
+): Promise<{ ok: true; token: string; email: string } | { ok: false; error: string }> {
   const trimmed = email.trim().toLowerCase();
   if (!trimmed || !password) {
     return { ok: false, error: 'Email and password are required.' };
@@ -60,6 +79,20 @@ export async function login(email: string, password: string): Promise<{ ok: true
   const match = await bcrypt.compare(password, user.PasswordHash);
   if (!match) {
     return { ok: false, error: 'Invalid email or password.' };
+  }
+
+  const ip = meta?.ip ?? null;
+  const ua = meta?.userAgent ?? null;
+
+  if (hasAuthDatabase()) {
+    const jti = crypto.randomUUID();
+    const created = await createSession(user.Id, jti, ip, ua);
+    if (!created) {
+      return { ok: false, error: 'Could not create a session. Please try again.' };
+    }
+    const token = signToken({ email: user.Email, userId: user.Id, jti });
+    await recordLoginEvent(user.Id, user.Email, true, ip, ua);
+    return { ok: true, token, email: user.Email };
   }
 
   const token = signToken({ email: user.Email, userId: user.Id });

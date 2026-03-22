@@ -12,8 +12,21 @@ import { generateTerraform } from './generators/terraform/index';
 import { validateBicep, validateTerraform } from './validation-iac';
 import { buildDefaultNetwork } from './core/network/defaults';
 import { SERVICE_CATALOG } from './core/services/catalog';
-import { saveGeneration, getGenerationsByUserId, getGenerationByIdAndUserId, deleteGenerationByIdAndUserId, checkDatabase } from './db/client';
+import {
+  saveGeneration,
+  getGenerationsByUserId,
+  getGenerationByIdAndUserId,
+  deleteGenerationByIdAndUserId,
+  checkDatabase,
+  findUserByEmail,
+  recordLoginEvent,
+  touchSession,
+  revokeSession,
+  getSessionStats,
+  getRecentLoginEvents,
+} from './db/client';
 import { register, login, verifyToken, requestPasswordReset, resetPassword } from './auth';
+import { getClientIp, getUserAgent } from './lib/clientIp';
 import {
   handleValidationErrors,
   registerValidation,
@@ -49,6 +62,14 @@ const WEB_DIR = path.join(__dirname, '..', 'web-dist');
 
 const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 
+/** How long without API activity before a session stops counting as "active" (env override). */
+const SESSION_IDLE_MINUTES = Math.max(
+  1,
+  Math.min(24 * 60, parseInt(process.env.SESSION_IDLE_MINUTES ?? '15', 10) || 15),
+);
+
+export type AuthedUser = { email: string; userId: number; jti?: string };
+
 /** Auth: strict limit to slow down brute-force and credential stuffing. */
 const authLimiter = rateLimit({
   windowMs: WINDOW_MS,
@@ -73,7 +94,7 @@ const generateLimiter = rateLimit({
   }),
 });
 
-function authMiddleware(req: express.Request, res: express.Response, next: express.NextFunction): void {
+async function authMiddleware(req: express.Request, res: express.Response, next: express.NextFunction): Promise<void> {
   const auth = req.headers.authorization;
   const token = auth?.startsWith('Bearer ') ? auth.slice(7) : null;
   if (!token) {
@@ -85,8 +106,29 @@ function authMiddleware(req: express.Request, res: express.Response, next: expre
     res.status(401).json({ error: 'Invalid or expired token.' });
     return;
   }
-  (req as express.Request & { user: { email: string; userId: number } }).user = payload;
+  if (payload.jti && process.env.AZURE_SQL_CONNECTION_STRING) {
+    const sessionOk = await touchSession(payload.jti);
+    if (!sessionOk) {
+      res.status(401).json({ error: 'Session expired or revoked. Sign in again.' });
+      return;
+    }
+  }
+  (req as express.Request & { user: AuthedUser }).user = payload;
   setRequestUserId(payload.userId);
+  next();
+}
+
+function adminApiKeyMiddleware(_req: express.Request, res: express.Response, next: express.NextFunction): void {
+  const key = process.env.ADMIN_API_KEY;
+  if (!key || key.length < 8) {
+    res.status(404).json({ error: 'Not found.' });
+    return;
+  }
+  const provided = _req.headers['x-admin-key'];
+  if (typeof provided !== 'string' || provided !== key) {
+    res.status(401).json({ error: 'Unauthorized.' });
+    return;
+  }
   next();
 }
 
@@ -121,12 +163,66 @@ app.post('/api/register', authLimiter, ...registerValidation, handleValidationEr
 // Auth: login (returns JWT; password checked against hash) — rate limited, validated
 app.post('/api/login', authLimiter, ...loginValidation, handleValidationErrors, async (req: express.Request, res: express.Response) => {
   const { email, password } = req.body as { email: string; password: string };
-  const result = await login(email, password);
+  const trimmed = email.trim().toLowerCase();
+  const ip = getClientIp(req);
+  const ua = getUserAgent(req);
+  const result = await login(email, password, { ip, userAgent: ua });
   if (!result.ok) {
-    res.status(401).json({ error: result.error });
+    if (result.error === 'Invalid email or password.') {
+      const u = await findUserByEmail(trimmed);
+      await recordLoginEvent(u?.Id ?? null, trimmed, false, ip, ua);
+      res.status(401).json({ error: result.error });
+      return;
+    }
+    res.status(503).json({ error: result.error });
     return;
   }
   res.json({ token: result.token, email: result.email });
+});
+
+// Revoke current DB-backed session (optional; client should call on sign-out)
+app.post('/api/logout', authMiddleware, async (req: express.Request, res: express.Response) => {
+  const { user } = req as express.Request & { user: AuthedUser };
+  if (user.jti && process.env.AZURE_SQL_CONNECTION_STRING) {
+    await revokeSession(user.jti, user.userId);
+  }
+  res.status(200).json({ ok: true });
+});
+
+// Admin: concurrent users + recent login events (set ADMIN_API_KEY; send X-Admin-Key header)
+app.get('/api/admin/login-stats', adminApiKeyMiddleware, async (req: express.Request, res: express.Response) => {
+  try {
+    const idleParam = parseInt(String(req.query.idleMinutes ?? ''), 10);
+    const idleMinutes = Number.isFinite(idleParam) && idleParam > 0 ? Math.min(idleParam, 24 * 60) : SESSION_IDLE_MINUTES;
+    const stats = await getSessionStats(idleMinutes);
+    if (!stats) {
+      res.status(503).json({ error: 'Database not available.' });
+      return;
+    }
+    const includeEvents = req.query.include === 'events';
+    const limitRaw = parseInt(String(req.query.limit ?? '50'), 10);
+    const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 200) : 50;
+    const recentEvents = includeEvents ? await getRecentLoginEvents(limit) : undefined;
+    res.json({
+      activeUsers: stats.activeUsers,
+      activeSessions: stats.activeSessions,
+      idleWindowMinutes: idleMinutes,
+      ...(recentEvents !== undefined && {
+        recentEvents: recentEvents.map((e) => ({
+          id: e.Id,
+          userId: e.UserId,
+          email: e.Email,
+          success: e.Success,
+          loginAt: e.LoginAt,
+          ipAddress: e.IpAddress,
+          userAgent: e.UserAgent,
+        })),
+      }),
+    });
+  } catch (err) {
+    getLogger().error({ err }, 'GET /api/admin/login-stats failed');
+    res.status(500).json({ error: 'Failed to load stats.' });
+  }
 });
 
 // Auth: forgot password — always 200 with generic message (no user enumeration); rate limited
@@ -157,13 +253,13 @@ app.post('/api/reset-password', authLimiter, ...resetPasswordValidation, handleV
 
 // Auth: current user (requires valid JWT)
 app.get('/api/me', authMiddleware, (req, res) => {
-  const { user } = req as express.Request & { user: { email: string; userId: number } };
+  const { user } = req as express.Request & { user: AuthedUser };
   res.json({ email: user.email });
 });
 
 // List generations for the current user (for "My generations" dashboard)
 app.get('/api/generations', authMiddleware, async (req, res) => {
-  const { user } = req as express.Request & { user: { email: string; userId: number } };
+  const { user } = req as express.Request & { user: AuthedUser };
   try {
     const list = await getGenerationsByUserId(user.userId);
     const generations = list.map((g) => ({
@@ -186,7 +282,7 @@ app.get('/api/generations', authMiddleware, async (req, res) => {
 // Delete a generation (same user only) — validated param
 app.delete('/api/generations/:id', ...generationIdParamValidation, handleValidationErrors, authMiddleware, async (req: express.Request, res: express.Response) => {
   const id = parseInt(req.params.id, 10);
-  const { user } = req as express.Request & { user: { email: string; userId: number } };
+  const { user } = req as express.Request & { user: AuthedUser };
   const deleted = await deleteGenerationByIdAndUserId(id, user.userId);
   if (!deleted) {
     res.status(404).json({ error: 'Generation not found.' });
@@ -198,7 +294,7 @@ app.delete('/api/generations/:id', ...generationIdParamValidation, handleValidat
 // Download again: regenerate zip from a stored generation (same user only) — validated param
 app.get('/api/generations/:id/download', generateLimiter, ...generationIdParamValidation, ...downloadFormatQueryValidation, handleValidationErrors, authMiddleware, async (req: express.Request, res: express.Response) => {
   const id = parseInt(req.params.id, 10);
-  const { user } = req as express.Request & { user: { email: string; userId: number } };
+  const { user } = req as express.Request & { user: AuthedUser };
   const row = await getGenerationByIdAndUserId(id, user.userId);
   if (!row) {
     res.status(404).json({ error: 'Generation not found.' });
@@ -290,7 +386,7 @@ app.post(
 
     const validation = format === 'bicep' ? validateBicep(tempDir) : validateTerraform(tempDir);
 
-    const { user } = req as express.Request & { user: { email: string; userId: number } };
+    const { user } = req as express.Request & { user: AuthedUser };
     await saveGeneration(config, format, user.userId, validation);
 
     const archive = archiver('zip', { zlib: { level: 6 } });

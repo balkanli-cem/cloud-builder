@@ -321,3 +321,159 @@ export async function updatePasswordAndClearResetToken(userId: number, passwordH
     return false;
   }
 }
+
+// ─── Login tracking & sessions (schema-login-tracking.sql) ───────────────────
+
+export async function recordLoginEvent(
+  userId: number | null,
+  emailNormalized: string,
+  success: boolean,
+  ipAddress: string | null,
+  userAgent: string | null,
+): Promise<void> {
+  const p = await getPool();
+  if (!p) return;
+  try {
+    await p.request()
+      .input('userId', sql.Int, userId)
+      .input('email', sql.NVarChar(256), emailNormalized.trim().toLowerCase())
+      .input('success', sql.Int, success ? 1 : 0)
+      .input('ipAddress', sql.NVarChar(45), ipAddress)
+      .input('userAgent', sql.NVarChar(512), userAgent)
+      .query(`
+        INSERT INTO dbo.UserLoginEvents (UserId, Email, Success, IpAddress, UserAgent)
+        VALUES (@userId, @email, @success, @ipAddress, @userAgent)
+      `);
+  } catch (err) {
+    getLogger().error({ err }, 'recordLoginEvent');
+  }
+}
+
+export async function createSession(
+  userId: number,
+  jti: string,
+  ipAddress: string | null,
+  userAgent: string | null,
+): Promise<boolean> {
+  const p = await getPool();
+  if (!p) return false;
+  try {
+    await p.request()
+      .input('userId', sql.Int, userId)
+      .input('jti', sql.NVarChar(36), jti)
+      .input('ipAddress', sql.NVarChar(45), ipAddress)
+      .input('userAgent', sql.NVarChar(512), userAgent)
+      .query(`
+        INSERT INTO dbo.UserSessions (UserId, Jti, IpAddress, UserAgent)
+        VALUES (@userId, @jti, @ipAddress, @userAgent)
+      `);
+    return true;
+  } catch (err) {
+    getLogger().error({ err }, 'createSession');
+    return false;
+  }
+}
+
+/** Returns true if session exists, not revoked, and was updated. */
+export async function touchSession(jti: string): Promise<boolean> {
+  const p = await getPool();
+  if (!p) return false;
+  try {
+    const result = await p.request()
+      .input('jti', sql.NVarChar(36), jti)
+      .query(`
+        UPDATE dbo.UserSessions
+        SET LastActivityAt = SYSUTCDATETIME()
+        WHERE Jti = @jti AND RevokedAt IS NULL
+      `);
+    const affected = (result as { rowsAffected: number[] }).rowsAffected;
+    return Array.isArray(affected) && affected[0] > 0;
+  } catch (err) {
+    getLogger().error({ err }, 'touchSession');
+    return false;
+  }
+}
+
+export async function revokeSession(jti: string, userId: number): Promise<boolean> {
+  const p = await getPool();
+  if (!p) return false;
+  try {
+    const result = await p.request()
+      .input('jti', sql.NVarChar(36), jti)
+      .input('userId', sql.Int, userId)
+      .query(`
+        UPDATE dbo.UserSessions
+        SET RevokedAt = SYSUTCDATETIME()
+        WHERE Jti = @jti AND UserId = @userId AND RevokedAt IS NULL
+      `);
+    const affected = (result as { rowsAffected: number[] }).rowsAffected;
+    return Array.isArray(affected) && affected[0] > 0;
+  } catch (err) {
+    getLogger().error({ err }, 'revokeSession');
+    return false;
+  }
+}
+
+export interface SessionStatsSnapshot {
+  activeUsers: number;
+  activeSessions: number;
+  idleWindowMinutes: number;
+}
+
+/** Distinct users vs sessions with activity since cutoff (idle window). */
+export async function getSessionStats(idleWindowMinutes: number): Promise<SessionStatsSnapshot | null> {
+  const p = await getPool();
+  if (!p) return null;
+  try {
+    const result = await p.request()
+      .input('idleMinutes', sql.Int, idleWindowMinutes)
+      .query(`
+        DECLARE @cutoff DATETIME2(7) = DATEADD(MINUTE, -@idleMinutes, SYSUTCDATETIME());
+
+        SELECT
+          (SELECT COUNT(DISTINCT UserId)
+           FROM dbo.UserSessions
+           WHERE RevokedAt IS NULL AND LastActivityAt >= @cutoff) AS ActiveUsers,
+          (SELECT COUNT(*)
+           FROM dbo.UserSessions
+           WHERE RevokedAt IS NULL AND LastActivityAt >= @cutoff) AS ActiveSessions
+      `);
+    const row = (result as { recordset: { ActiveUsers: number; ActiveSessions: number }[] }).recordset[0];
+    if (!row) return { activeUsers: 0, activeSessions: 0, idleWindowMinutes: idleWindowMinutes };
+    return {
+      activeUsers: Number(row.ActiveUsers) || 0,
+      activeSessions: Number(row.ActiveSessions) || 0,
+      idleWindowMinutes: idleWindowMinutes,
+    };
+  } catch (err) {
+    getLogger().error({ err }, 'getSessionStats');
+    return null;
+  }
+}
+
+export interface LoginEventRow {
+  Id: number;
+  UserId: number | null;
+  Email: string;
+  Success: boolean;
+  LoginAt: Date;
+  IpAddress: string | null;
+  UserAgent: string | null;
+}
+
+export async function getRecentLoginEvents(limit: number): Promise<LoginEventRow[]> {
+  const p = await getPool();
+  if (!p) return [];
+  const take = Math.min(Math.max(1, limit), 500);
+  try {
+    const result = await p.request().query(`
+      SELECT TOP (${take}) Id, UserId, Email, Success, LoginAt, IpAddress, UserAgent
+      FROM dbo.UserLoginEvents
+      ORDER BY LoginAt DESC
+    `);
+    return (result as { recordset: LoginEventRow[] }).recordset ?? [];
+  } catch (err) {
+    getLogger().error({ err }, 'getRecentLoginEvents');
+    return [];
+  }
+}

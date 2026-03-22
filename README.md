@@ -11,6 +11,8 @@ Interactive Azure infrastructure builder that generates **Bicep** or **Terraform
 
 Generated files are written to `output/<projectName>/bicep/` or `output/<projectName>/terraform/`. When running as the web app with **AZURE_SQL_CONNECTION_STRING** set, each generation is stored in an Azure SQL table for history.
 
+**Login tracking (optional):** Run `deploy/terraform/sql/schema-login-tracking.sql` on the same database. That adds **UserLoginEvents** (success/failure audit with IP and user agent) and **UserSessions** (JWT session id + last activity). Each successful login creates a row in both; API calls refresh session activity; sign-out revokes the session. Without this migration, login still works but uses stateless JWTs only (no DB session enforcement). **Concurrent “logged in” users** = distinct users with a non-revoked session whose **LastActivityAt** is within **SESSION_IDLE_MINUTES** (default 15). Query metrics with **GET /api/admin/login-stats** and header **X-Admin-Key** (set env **ADMIN_API_KEY** to a long random secret; endpoint returns 404 if unset).
+
 ## Prerequisites
 
 - **Node.js** 18+ and npm.
