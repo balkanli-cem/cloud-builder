@@ -1,7 +1,9 @@
 import type { ProjectConfig } from '../../types/index';
+import { getIacSettings, tfMapString } from '../../core/iac/conventions';
 
 export function renderMainTf(config: ProjectConfig): string {
   const needsRandom = config.services.some(s => s.type === 'azure-sql');
+  const iac = getIacSettings(config);
 
   const randomProvider = needsRandom
     ? `    random = {
@@ -9,6 +11,15 @@ export function renderMainTf(config: ProjectConfig): string {
       version = "~> 3.0"
     }\n`
     : '';
+
+  const defaultTagsBlock =
+    Object.keys(iac.tags).length > 0
+      ? `
+  default_tags {
+    tags = var.default_tags
+  }
+`
+      : '';
 
   return `terraform {
   required_providers {
@@ -25,7 +36,7 @@ provider "azurerm" {
       purge_soft_delete_on_destroy    = false
       recover_soft_deleted_key_vaults = true
     }
-  }
+  }${defaultTagsBlock}
 }
 
 resource "azurerm_resource_group" "main" {
@@ -36,6 +47,7 @@ resource "azurerm_resource_group" "main" {
 }
 
 export function renderVariablesTf(config: ProjectConfig): string {
+  const iac = getIacSettings(config);
   const hasVmOrVmss = config.services.some(s => s.type === 'vm' || s.type === 'vmss');
   const vmVariables = hasVmOrVmss
     ? `
@@ -54,6 +66,17 @@ variable "admin_password" {
 `
     : '';
 
+  const defaultTagsVar =
+    Object.keys(iac.tags).length > 0
+      ? `
+variable "default_tags" {
+  description = "Tags applied to all supported resources (provider default_tags)."
+  type        = map(string)
+  default     = ${tfMapString(iac.tags)}
+}
+`
+      : '';
+
   return `variable "location" {
   description = "Azure region for all resources."
   type        = string
@@ -65,7 +88,7 @@ variable "resource_group_name" {
   type        = string
   default     = "${config.resourceGroupName}"
 }
-${vmVariables}
+${defaultTagsVar}${vmVariables}
 `;
 }
 

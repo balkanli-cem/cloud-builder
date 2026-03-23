@@ -1,5 +1,7 @@
 import type { ProjectConfig, AzureService, VMConfig, VMSSConfig } from '../../types/index';
 import { projectUsesSharedNetwork, serviceUsesSharedSubnet } from '../../core/services/networkPolicy';
+import { getIacSettings } from '../../core/iac/conventions';
+import { renderBicepObjectLiteral } from '../../core/iac/bicepSerialize';
 
 function subnetRef(svc: AzureService, config: ProjectConfig): string {
   return svc.subnetPlacement
@@ -12,6 +14,26 @@ function networkDependsOn(svc: AzureService): string {
 }
 
 export function renderMainBicep(config: ProjectConfig): string {
+  const iac = getIacSettings(config);
+  const tagsLiteral = renderBicepObjectLiteral(iac.tags);
+  const vmZoneEsc = iac.vmAvailabilityZone.replace(/'/g, "''");
+  const apimParts = iac.apimSku.split('_');
+  const apimSkuName = apimParts[0] ?? 'Developer';
+  const apimSkuCapacity = apimParts[1] ? parseInt(apimParts[1], 10) : 1;
+  const iacParams = `
+param tags object = ${tagsLiteral}
+param appServicePlanSku string = '${iac.appServicePlanSku}'
+param aksNodeVmSize string = '${iac.aksNodeVmSize}'
+param aksNodeCount int = ${iac.aksNodeCount}
+param storageSkuName string = 'Standard_${iac.storageReplication}'
+param sqlZoneRedundant bool = ${iac.sqlZoneRedundant}
+param apimSkuName string = '${apimSkuName}'
+param apimSkuCapacity int = ${Number.isFinite(apimSkuCapacity) ? apimSkuCapacity : 1}
+param cosmosEnableFreeTier bool = ${iac.cosmosEnableFreeTier}
+param enablePrivateEndpoints bool = ${iac.enablePrivateEndpoints}
+param vmAvailabilityZone string = '${vmZoneEsc}'
+`;
+
   const includeNetwork = projectUsesSharedNetwork(config.services);
   const subnetArray = config.network.subnets
     .map(s => `      {\n        name: '${s.name}'\n        addressPrefix: '${s.addressPrefix}'\n      }`)
@@ -36,6 +58,9 @@ export function renderMainBicep(config: ProjectConfig): string {
     name: '${svc.name}'
     attachToSubnet: ${attach}
     subnetId: ${attach ? subnetRefStr : "''"}
+    tags: tags
+    aksNodeVmSize: aksNodeVmSize
+    aksNodeCount: aksNodeCount
   }
 }`;
       }
@@ -60,6 +85,8 @@ export function renderMainBicep(config: ProjectConfig): string {
     adminUsername: '${adminUsername}'
     osDiskSizeGb: ${osDiskSizeGb}
     adminPasswordOrKey: adminPasswordOrKey
+    tags: tags
+    vmAvailabilityZone: vmAvailabilityZone
   }
 }`;
       }
@@ -86,6 +113,93 @@ export function renderMainBicep(config: ProjectConfig): string {
     scaleOutCpuPercent: ${scaleOutCpuPercent}
     scaleInCpuPercent: ${scaleInCpuPercent}
     adminPasswordOrKey: adminPasswordOrKey
+    tags: tags
+    vmAvailabilityZone: vmAvailabilityZone
+  }
+}`;
+      }
+      if (svc.type === 'app-service') {
+        return `module ${toIdentifier(svc.name)} './modules/${svc.type}.bicep' = {
+  name: '${svc.name}-deployment'
+  ${dep}params: {
+    location: location
+    name: '${svc.name}'
+    subnetId: ${subnetRefStr}
+    tags: tags
+    appServicePlanSku: appServicePlanSku
+  }
+}`;
+      }
+      if (svc.type === 'azure-sql') {
+        return `module ${toIdentifier(svc.name)} './modules/${svc.type}.bicep' = {
+  name: '${svc.name}-deployment'
+  ${dep}params: {
+    location: location
+    name: '${svc.name}'
+    subnetId: ${subnetRefStr}
+    tags: tags
+    sqlZoneRedundant: sqlZoneRedundant
+  }
+}`;
+      }
+      if (svc.type === 'storage-account') {
+        return `module ${toIdentifier(svc.name)} './modules/${svc.type}.bicep' = {
+  name: '${svc.name}-deployment'
+  ${dep}params: {
+    location: location
+    name: '${svc.name}'
+    subnetId: ${subnetRefStr}
+    tags: tags
+    storageSkuName: storageSkuName
+    enablePrivateEndpoints: enablePrivateEndpoints
+  }
+}`;
+      }
+      if (svc.type === 'key-vault') {
+        return `module ${toIdentifier(svc.name)} './modules/${svc.type}.bicep' = {
+  name: '${svc.name}-deployment'
+  ${dep}params: {
+    location: location
+    name: '${svc.name}'
+    subnetId: ${subnetRefStr}
+    tags: tags
+    enablePrivateEndpoints: enablePrivateEndpoints
+  }
+}`;
+      }
+      if (svc.type === 'api-management') {
+        return `module ${toIdentifier(svc.name)} './modules/${svc.type}.bicep' = {
+  name: '${svc.name}-deployment'
+  ${dep}params: {
+    location: location
+    name: '${svc.name}'
+    subnetId: ${subnetRefStr}
+    tags: tags
+    apimSkuName: apimSkuName
+    apimSkuCapacity: apimSkuCapacity
+  }
+}`;
+      }
+      if (svc.type === 'cosmos-db') {
+        return `module ${toIdentifier(svc.name)} './modules/${svc.type}.bicep' = {
+  name: '${svc.name}-deployment'
+  ${dep}params: {
+    location: location
+    name: '${svc.name}'
+    subnetId: ${subnetRefStr}
+    tags: tags
+    cosmosEnableFreeTier: cosmosEnableFreeTier
+  }
+}`;
+      }
+      if (svc.type === 'container-apps') {
+        return `module ${toIdentifier(svc.name)} './modules/${svc.type}.bicep' = {
+  name: '${svc.name}-deployment'
+  ${dep}params: {
+    location: location
+    name: '${svc.name}'
+    subnetId: ${subnetRefStr}
+    tags: tags
   }
 }`;
       }
@@ -95,6 +209,7 @@ export function renderMainBicep(config: ProjectConfig): string {
     location: location
     name: '${svc.name}'
     subnetId: ${subnetRefStr}
+    tags: tags
   }
 }`;
     })
@@ -122,6 +237,7 @@ module network './modules/network.bicep' = {
     subnets: [
 ${subnetArray}
     ]
+    tags: tags
   }
 }
 `
@@ -132,7 +248,7 @@ ${subnetArray}
   return `targetScope = 'resourceGroup'
 
 @description('Azure region for all resources.')
-param location string = '${config.region}'${secureParamBlock}
+param location string = '${config.region}'${iacParams}${secureParamBlock}
 ${networkBlock}
 // ─── Services ─────────────────────────────────────────────────────────────────
 

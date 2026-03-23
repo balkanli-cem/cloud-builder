@@ -4,6 +4,7 @@ import type { AzureService, ProjectConfig } from '../../types/index';
 import { projectUsesSharedNetwork } from '../../core/services/networkPolicy';
 import { renderMainTf, renderVariablesTf, renderOutputsTf } from './main';
 import { renderNetworkTerraform } from './network';
+import { renderDiagnosticsTerraform } from './diagnostics';
 import { renderServiceTerraform } from './services';
 
 export async function generateTerraform(config: ProjectConfig, outputDir: string): Promise<void> {
@@ -32,8 +33,10 @@ export async function generateTerraform(config: ProjectConfig, outputDir: string
   for (const [type, services] of byType) {
     await fs.writeFile(
       path.join(outputDir, `${type}.tf`),
-      renderServiceTerraform(services),
+      renderServiceTerraform(config, services),
       'utf8',
     );
   }
+
+  await fs.writeFile(path.join(outputDir, 'diagnostics.tf'), renderDiagnosticsTerraform(config), 'utf8');
 }

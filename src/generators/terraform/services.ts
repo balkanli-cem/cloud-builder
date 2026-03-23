@@ -1,5 +1,6 @@
-import type { AzureService, VMConfig, VMSSConfig } from '../../types/index';
+import type { AzureService, VMConfig, VMSSConfig, ProjectConfig } from '../../types/index';
 import { serviceUsesSharedSubnet } from '../../core/services/networkPolicy';
+import { getIacSettings, resolveResourceNameSegment, sanitizeStorageAccountName, type IacResolved } from '../../core/iac/conventions';
 import { toTfId } from './network';
 
 function getSubnetRef(svc: AzureService): string {
@@ -11,24 +12,31 @@ function getSubnetRef(svc: AzureService): string {
     : 'azurerm_subnet.backend.id';
 }
 
-export function renderServiceTerraform(services: AzureService[]): string {
+function effectiveName(projectConfig: ProjectConfig, logicalName: string): string {
+  return resolveResourceNameSegment(logicalName, projectConfig);
+}
+
+export function renderServiceTerraform(projectConfig: ProjectConfig, services: AzureService[]): string {
   if (services.length === 0) return '';
+
+  const iac = getIacSettings(projectConfig);
 
   const blocks = services.map((svc) => {
     const id = toTfId(svc.name);
-    const config = (svc.config || {}) as Record<string, unknown>;
+    const name = effectiveName(projectConfig, svc.name);
+    const svcConfig = (svc.config || {}) as Record<string, unknown>;
     const sub = serviceUsesSharedSubnet(svc) ? getSubnetRef(svc) : null;
     switch (svc.type) {
-      case 'app-service':     return appService(id, svc.name, sub!);
-      case 'aks':             return aks(id, svc.name, sub);
-      case 'azure-sql':       return azureSql(id, svc.name, sub!);
-      case 'cosmos-db':       return cosmosDb(id, svc.name, sub!);
-      case 'storage-account': return storageAccount(id, svc.name, sub!);
-      case 'key-vault':       return keyVault(id, svc.name, sub!);
-      case 'api-management':  return apiManagement(id, svc.name, sub!);
-      case 'container-apps':  return containerApps(id, svc.name, sub!);
-      case 'vm':              return vm(id, svc.name, sub!, config as VMConfig);
-      case 'vmss':            return vmss(id, svc.name, sub!, config as VMSSConfig);
+      case 'app-service':     return appService(iac, id, name, sub!);
+      case 'aks':             return aks(iac, id, name, sub);
+      case 'azure-sql':       return azureSql(iac, id, name, sub!);
+      case 'cosmos-db':       return cosmosDb(iac, id, name, sub!);
+      case 'storage-account': return storageAccount(projectConfig, iac, id, svc.name, sub!);
+      case 'key-vault':       return keyVault(projectConfig, iac, id, name, sub!);
+      case 'api-management':  return apiManagement(iac, id, name, sub!);
+      case 'container-apps':  return containerApps(iac, id, name, sub!);
+      case 'vm':              return vm(projectConfig, iac, id, name, sub!, svcConfig as VMConfig);
+      case 'vmss':            return vmss(projectConfig, iac, id, name, sub!, svcConfig as VMSSConfig);
     }
   });
   // Key Vault needs the client config data block once per file, not per instance
@@ -39,13 +47,13 @@ export function renderServiceTerraform(services: AzureService[]): string {
 
 // ─── App Service ──────────────────────────────────────────────────────────────
 
-function appService(id: string, name: string, subnetRef: string): string {
+function appService(iac: IacResolved, id: string, name: string, subnetRef: string): string {
   return `resource "azurerm_service_plan" "${id}" {
   name                = "${name}-plan"
   resource_group_name = azurerm_resource_group.main.name
   location            = azurerm_resource_group.main.location
   os_type             = "Linux"
-  sku_name            = "B1"
+  sku_name            = "${iac.appServicePlanSku}"
 }
 
 resource "azurerm_linux_web_app" "${id}" {
@@ -70,7 +78,7 @@ output "${id}_hostname" {
 
 // ─── AKS ──────────────────────────────────────────────────────────────────────
 
-function aks(id: string, name: string, subnetRef: string | null): string {
+function aks(iac: IacResolved, id: string, name: string, subnetRef: string | null): string {
   if (subnetRef) {
     return `resource "azurerm_kubernetes_cluster" "${id}" {
   name                = "${name}"
@@ -80,8 +88,8 @@ function aks(id: string, name: string, subnetRef: string | null): string {
 
   default_node_pool {
     name           = "nodepool1"
-    node_count     = 3
-    vm_size        = "Standard_DS2_v2"
+    node_count     = ${iac.aksNodeCount}
+    vm_size        = "${iac.aksNodeVmSize}"
     vnet_subnet_id = ${subnetRef}
   }
 
@@ -109,8 +117,8 @@ output "${id}_kube_config" {
 
   default_node_pool {
     name       = "nodepool1"
-    node_count = 3
-    vm_size    = "Standard_DS2_v2"
+    node_count = ${iac.aksNodeCount}
+    vm_size    = "${iac.aksNodeVmSize}"
   }
 
   identity {
@@ -131,7 +139,7 @@ output "${id}_kube_config" {
 
 // ─── Azure SQL ────────────────────────────────────────────────────────────────
 
-function azureSql(id: string, name: string, subnetRef: string): string {
+function azureSql(iac: IacResolved, id: string, name: string, subnetRef: string): string {
   return `# Requires the hashicorp/random provider — already added to main.tf
 resource "random_password" "${id}_admin" {
   length  = 16
@@ -155,6 +163,7 @@ resource "azurerm_mssql_database" "${id}" {
   sku_name                    = "GP_S_Gen5_1"
   auto_pause_delay_in_minutes = 60
   min_capacity                = 0.5
+  zone_redundant              = ${iac.sqlZoneRedundant ? 'true' : 'false'}
 }
 
 resource "azurerm_mssql_virtual_network_rule" "${id}" {
@@ -171,13 +180,14 @@ output "${id}_server_id" {
 
 // ─── Cosmos DB ────────────────────────────────────────────────────────────────
 
-function cosmosDb(id: string, name: string, subnetRef: string): string {
+function cosmosDb(iac: IacResolved, id: string, name: string, subnetRef: string): string {
   return `resource "azurerm_cosmosdb_account" "${id}" {
   name                = "${name}"
   location            = azurerm_resource_group.main.location
   resource_group_name = azurerm_resource_group.main.name
   offer_type          = "Standard"
   kind                = "GlobalDocumentDB"
+  enable_free_tier    = ${iac.cosmosEnableFreeTier ? 'true' : 'false'}
 
   consistency_policy {
     consistency_level = "Session"
@@ -206,15 +216,32 @@ output "${id}_endpoint" {
 
 // ─── Storage Account ──────────────────────────────────────────────────────────
 
-function storageAccount(id: string, name: string, subnetRef: string): string {
-  return `# NOTE: Storage account names must be 3-24 chars, lowercase alphanumeric only (no hyphens).
-# Adjust the name below if your resource name contains hyphens.
+function storageAccount(projectConfig: ProjectConfig, iac: IacResolved, id: string, logicalName: string, subnetRef: string): string {
+  const stName = sanitizeStorageAccountName(logicalName, projectConfig);
+  const pe = iac.enablePrivateEndpoints
+    ? `
+resource "azurerm_private_endpoint" "${id}_pe" {
+  name                = "${stName}-blob-pe"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  subnet_id           = ${subnetRef}
+
+  private_service_connection {
+    name                           = "psc-blob"
+    private_connection_resource_id = azurerm_storage_account.${id}.id
+    subresource_names              = ["blob"]
+    is_manual_connection           = false
+  }
+}
+`
+    : '';
+  return `# NOTE: Storage account name is sanitized (3-24 chars, alphanumeric).
 resource "azurerm_storage_account" "${id}" {
-  name                     = "${name}"
+  name                     = "${stName}"
   resource_group_name      = azurerm_resource_group.main.name
   location                 = azurerm_resource_group.main.location
   account_tier             = "Standard"
-  account_replication_type = "LRS"
+  account_replication_type = "${iac.storageReplication}"
   account_kind             = "StorageV2"
   min_tls_version          = "TLS1_2"
 
@@ -226,7 +253,7 @@ resource "azurerm_storage_account" "${id}" {
     virtual_network_subnet_ids = [${subnetRef}]
   }
 }
-
+${pe}
 output "${id}_blob_endpoint" {
   value = azurerm_storage_account.${id}.primary_blob_endpoint
 }
@@ -240,7 +267,24 @@ function keyVaultDataBlock(): string {
 `;
 }
 
-function keyVault(id: string, name: string, subnetRef: string): string {
+function keyVault(projectConfig: ProjectConfig, iac: IacResolved, id: string, name: string, subnetRef: string): string {
+  const pe = iac.enablePrivateEndpoints
+    ? `
+resource "azurerm_private_endpoint" "${id}_kv_pe" {
+  name                = "${name}-kv-pe"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  subnet_id           = ${subnetRef}
+
+  private_service_connection {
+    name                           = "psc-kv"
+    private_connection_resource_id = azurerm_key_vault.${id}.id
+    subresource_names              = ["vault"]
+    is_manual_connection           = false
+  }
+}
+`
+    : '';
   return `resource "azurerm_key_vault" "${id}" {
   name                = "${name}"
   location            = azurerm_resource_group.main.location
@@ -258,7 +302,7 @@ function keyVault(id: string, name: string, subnetRef: string): string {
     virtual_network_subnet_ids = [${subnetRef}]
   }
 }
-
+${pe}
 output "${id}_uri" {
   value = azurerm_key_vault.${id}.vault_uri
 }
@@ -267,7 +311,7 @@ output "${id}_uri" {
 
 // ─── API Management ───────────────────────────────────────────────────────────
 
-function apiManagement(id: string, name: string, subnetRef: string): string {
+function apiManagement(iac: IacResolved, id: string, name: string, subnetRef: string): string {
   return `# NOTE: APIM deployment can take 30-45 minutes.
 resource "azurerm_api_management" "${id}" {
   name                = "${name}"
@@ -275,7 +319,7 @@ resource "azurerm_api_management" "${id}" {
   resource_group_name = azurerm_resource_group.main.name
   publisher_name      = "Contoso"
   publisher_email     = "admin@contoso.com"
-  sku_name            = "Developer_1"
+  sku_name            = "${iac.apimSku}"
 
   virtual_network_type = "Internal"
 
@@ -292,7 +336,7 @@ output "${id}_gateway_url" {
 
 // ─── Container Apps ───────────────────────────────────────────────────────────
 
-function containerApps(id: string, name: string, subnetRef: string): string {
+function containerApps(_iac: IacResolved, id: string, name: string, subnetRef: string): string {
   return `resource "azurerm_container_app_environment" "${id}_env" {
   name                       = "${name}-env"
   location                   = azurerm_resource_group.main.location
@@ -335,7 +379,8 @@ output "${id}_fqdn" {
 
 // ─── Virtual Machine ──────────────────────────────────────────────────────────
 
-function vm(id: string, name: string, subnetRef: string, c: VMConfig): string {
+function vm(projectConfig: ProjectConfig, iac: IacResolved, id: string, name: string, subnetRef: string, c: VMConfig): string {
+  void projectConfig;
   const enablePublicIp = c.enablePublicIp !== false;
   const nicName = c.nicName ?? `${name}-nic`;
   const vmSize = c.vmSize ?? 'Standard_B2s';
@@ -343,6 +388,7 @@ function vm(id: string, name: string, subnetRef: string, c: VMConfig): string {
   const adminUsername = c.adminUsername ?? 'azureuser';
   const osDiskSizeGb = c.osDiskSizeGb ?? 30;
   const isLinux = osType === 'Linux';
+  const zoneAttr = iac.vmAvailabilityZone ? `\n  zones               = ["${iac.vmAvailabilityZone}"]\n` : '';
 
   const pipBlock = enablePublicIp
     ? `
@@ -380,6 +426,7 @@ resource "azurerm_linux_virtual_machine" "${id}" {
   size                = "${vmSize}"
   admin_username      = "${adminUsername}"
   network_interface_ids = [azurerm_network_interface.${id}_nic.id]
+${zoneAttr}
 
   admin_ssh_key {
     username   = "${adminUsername}"
@@ -418,6 +465,7 @@ resource "azurerm_windows_virtual_machine" "${id}" {
   admin_username      = "${adminUsername}"
   admin_password     = var.admin_password
   network_interface_ids = [azurerm_network_interface.${id}_nic.id]
+${zoneAttr}
 
   os_disk {
     name                 = "${name}-osdisk"
@@ -447,7 +495,8 @@ output "${id}_public_ip" {
 
 // ─── Virtual Machine Scale Set ─────────────────────────────────────────────────
 
-function vmss(id: string, name: string, subnetRef: string, c: VMSSConfig): string {
+function vmss(projectConfig: ProjectConfig, iac: IacResolved, id: string, name: string, subnetRef: string, c: VMSSConfig): string {
+  void projectConfig;
   const vmSize = c.vmSize ?? 'Standard_B2s';
   const osType = (c.osType ?? 'Linux') as string;
   const nicName = c.nicName ?? `${name}-nic`;
@@ -456,6 +505,7 @@ function vmss(id: string, name: string, subnetRef: string, c: VMSSConfig): strin
   const scaleOutCpuPercent = c.scaleOutCpuPercent ?? 70;
   const scaleInCpuPercent = c.scaleInCpuPercent ?? 30;
   const isLinux = osType === 'Linux';
+  const zoneAttr = iac.vmAvailabilityZone ? `\n  zones               = ["${iac.vmAvailabilityZone}"]\n` : '';
 
   const linuxVmssBlock = `
 resource "azurerm_linux_virtual_machine_scale_set" "${id}" {
@@ -465,7 +515,7 @@ resource "azurerm_linux_virtual_machine_scale_set" "${id}" {
   sku                 = "${vmSize}"
   instances           = ${instanceCountMin}
   admin_username      = "azureuser"
-
+${zoneAttr}
   admin_ssh_key {
     username   = "azureuser"
     public_key = var.admin_ssh_public_key
@@ -564,7 +614,7 @@ resource "azurerm_windows_virtual_machine_scale_set" "${id}" {
   instances           = ${instanceCountMin}
   admin_username      = "azureuser"
   admin_password      = var.admin_password
-
+${zoneAttr}
   source_image_reference {
     publisher = "MicrosoftWindowsServer"
     offer     = "WindowsServer"

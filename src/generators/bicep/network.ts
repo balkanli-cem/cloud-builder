@@ -11,10 +11,12 @@ export function renderNetworkBicep(network: NetworkConfig): string {
 param vnetName string
 param addressSpace string
 param subnets array
+param tags object = {}
 
 resource vnet 'Microsoft.Network/virtualNetworks@2024-01-01' = {
   name: vnetName
   location: location
+  tags: tags
   properties: {
     addressSpace: {
       addressPrefixes: [

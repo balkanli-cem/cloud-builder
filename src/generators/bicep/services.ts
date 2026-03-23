@@ -21,12 +21,15 @@ function appService(): string {
   return `param location string
 param name string
 param subnetId string
+param tags object = {}
+param appServicePlanSku string = 'B1'
 
 resource appServicePlan 'Microsoft.Web/serverfarms@2023-01-01' = {
   name: '\${name}-plan'
   location: location
+  tags: tags
   sku: {
-    name: 'B1'
+    name: appServicePlanSku
     tier: 'Basic'
   }
   kind: 'linux'
@@ -38,6 +41,7 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2023-01-01' = {
 resource webApp 'Microsoft.Web/sites@2023-01-01' = {
   name: name
   location: location
+  tags: tags
   properties: {
     serverFarmId: appServicePlan.id
     virtualNetworkSubnetId: subnetId
@@ -64,10 +68,14 @@ param name string
 @description('When true, use Azure CNI with the provided subnet; when false, use Kubenet (no shared VNet subnet).')
 param attachToSubnet bool
 param subnetId string = ''
+param tags object = {}
+param aksNodeVmSize string = 'Standard_DS2_v2'
+param aksNodeCount int = 3
 
 resource aks 'Microsoft.ContainerService/managedClusters@2024-02-01' = {
   name: name
   location: location
+  tags: tags
   identity: {
     type: 'SystemAssigned'
   }
@@ -82,8 +90,8 @@ resource aks 'Microsoft.ContainerService/managedClusters@2024-02-01' = {
     agentPoolProfiles: attachToSubnet ? [
       {
         name: 'nodepool1'
-        count: 3
-        vmSize: 'Standard_DS2_v2'
+        count: aksNodeCount
+        vmSize: aksNodeVmSize
         osType: 'Linux'
         mode: 'System'
         vnetSubnetID: subnetId
@@ -91,8 +99,8 @@ resource aks 'Microsoft.ContainerService/managedClusters@2024-02-01' = {
     ] : [
       {
         name: 'nodepool1'
-        count: 3
-        vmSize: 'Standard_DS2_v2'
+        count: aksNodeCount
+        vmSize: aksNodeVmSize
         osType: 'Linux'
         mode: 'System'
       }
@@ -111,6 +119,8 @@ function azureSql(): string {
   return `param location string
 param name string
 param subnetId string
+param tags object = {}
+param sqlZoneRedundant bool = false
 
 @secure()
 param adminPassword string = newGuid()
@@ -118,6 +128,7 @@ param adminPassword string = newGuid()
 resource sqlServer 'Microsoft.Sql/servers@2023-05-01-preview' = {
   name: name
   location: location
+  tags: tags
   properties: {
     administratorLogin: 'sqladmin'
     administratorLoginPassword: adminPassword
@@ -138,6 +149,7 @@ resource sqlDb 'Microsoft.Sql/servers/databases@2023-05-01-preview' = {
     collation: 'SQL_Latin1_General_CP1_CI_AS'
     autoPauseDelay: 60
     minCapacity: json('0.5')
+    zoneRedundant: sqlZoneRedundant
   }
 }
 
@@ -161,10 +173,13 @@ function cosmosDb(): string {
   return `param location string
 param name string
 param subnetId string
+param tags object = {}
+param cosmosEnableFreeTier bool = true
 
 resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2024-02-15-preview' = {
   name: name
   location: location
+  tags: tags
   kind: 'GlobalDocumentDB'
   properties: {
     consistencyPolicy: {
@@ -187,6 +202,7 @@ resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2024-02-15-preview
     ]
     publicNetworkAccess: 'Disabled'
     enableAutomaticFailover: false
+    enableFreeTier: cosmosEnableFreeTier
   }
 }
 
@@ -203,12 +219,16 @@ function storageAccount(): string {
 param location string
 param name string
 param subnetId string
+param tags object = {}
+param storageSkuName string = 'Standard_LRS'
+param enablePrivateEndpoints bool = false
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   name: name
   location: location
+  tags: tags
   sku: {
-    name: 'Standard_LRS'
+    name: storageSkuName
   }
   kind: 'StorageV2'
   properties: {
@@ -229,6 +249,28 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   }
 }
 
+resource storagePe 'Microsoft.Network/privateEndpoints@2024-01-01' = if (enablePrivateEndpoints) {
+  name: '\${name}-blob-pe'
+  location: location
+  tags: tags
+  properties: {
+    subnet: {
+      id: subnetId
+    }
+    privateLinkServiceConnections: [
+      {
+        name: 'blob'
+        properties: {
+          privateLinkServiceId: storageAccount.id
+          groupIds: [
+            'blob'
+          ]
+        }
+      }
+    ]
+  }
+}
+
 output storageAccountId string = storageAccount.id
 output blobEndpoint string = storageAccount.properties.primaryEndpoints.blob
 `;
@@ -240,11 +282,14 @@ function keyVault(): string {
   return `param location string
 param name string
 param subnetId string
+param tags object = {}
+param enablePrivateEndpoints bool = false
 param tenantId string = subscription().tenantId
 
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   name: name
   location: location
+  tags: tags
   properties: {
     tenantId: tenantId
     sku: {
@@ -268,6 +313,28 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   }
 }
 
+resource kvPe 'Microsoft.Network/privateEndpoints@2024-01-01' = if (enablePrivateEndpoints) {
+  name: '\${name}-kv-pe'
+  location: location
+  tags: tags
+  properties: {
+    subnet: {
+      id: subnetId
+    }
+    privateLinkServiceConnections: [
+      {
+        name: 'vault'
+        properties: {
+          privateLinkServiceId: keyVault.id
+          groupIds: [
+            'vault'
+          ]
+        }
+      }
+    ]
+  }
+}
+
 output keyVaultId string = keyVault.id
 output keyVaultUri string = keyVault.properties.vaultUri
 `;
@@ -280,13 +347,17 @@ function apiManagement(): string {
 param location string
 param name string
 param subnetId string
+param tags object = {}
+param apimSkuName string = 'Developer'
+param apimSkuCapacity int = 1
 
 resource apim 'Microsoft.ApiManagement/service@2023-09-01-preview' = {
   name: name
   location: location
+  tags: tags
   sku: {
-    name: 'Developer'
-    capacity: 1
+    name: apimSkuName
+    capacity: apimSkuCapacity
   }
   properties: {
     publisherEmail: 'admin@contoso.com'
@@ -309,10 +380,12 @@ function containerApps(): string {
   return `param location string
 param name string
 param subnetId string
+param tags object = {}
 
 resource containerAppEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
   name: '\${name}-env'
   location: location
+  tags: tags
   properties: {
     vnetConfiguration: {
       infrastructureSubnetId: subnetId
@@ -324,6 +397,7 @@ resource containerAppEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
 resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: name
   location: location
+  tags: tags
   properties: {
     managedEnvironmentId: containerAppEnv.id
     configuration: {
@@ -362,6 +436,8 @@ function vm(): string {
   return `param location string
 param name string
 param subnetId string
+param tags object = {}
+param vmAvailabilityZone string = ''
 param enablePublicIp bool = true
 param nicName string = '\${name}-nic'
 param vmSize string = 'Standard_B2s'
@@ -375,6 +451,7 @@ param adminPasswordOrKey string
 resource nic 'Microsoft.Network/networkInterfaces@2024-01-01' = {
   name: nicName
   location: location
+  tags: tags
   properties: {
     ipConfigurations: [
       {
@@ -392,6 +469,7 @@ resource nic 'Microsoft.Network/networkInterfaces@2024-01-01' = {
 resource pip 'Microsoft.Network/publicIPAddresses@2024-01-01' = if (enablePublicIp) {
   name: '\${name}-pip'
   location: location
+  tags: tags
   properties: {
     publicIPAllocationMethod: 'Static'
     sku: { name: 'Standard' }
@@ -401,6 +479,10 @@ resource pip 'Microsoft.Network/publicIPAddresses@2024-01-01' = if (enablePublic
 resource vm 'Microsoft.Compute/virtualMachines@2024-07-01' = {
   name: name
   location: location
+  tags: tags
+  zones: vmAvailabilityZone != '' ? [
+    vmAvailabilityZone
+  ] : null
   properties: {
     hardwareProfile: { vmSize: vmSize }
     osProfile: {
@@ -449,6 +531,8 @@ function vmss(): string {
   return `param location string
 param name string
 param subnetId string
+param tags object = {}
+param vmAvailabilityZone string = ''
 param nicName string = '\${name}-nic'
 param vmSize string = 'Standard_B2s'
 param osType string = 'Linux'
@@ -463,6 +547,10 @@ param adminPasswordOrKey string
 resource vmss 'Microsoft.Compute/virtualMachineScaleSets@2024-07-01' = {
   name: name
   location: location
+  tags: tags
+  zones: vmAvailabilityZone != '' ? [
+    vmAvailabilityZone
+  ] : null
   sku: {
     name: vmSize
     tier: 'Standard'
@@ -522,6 +610,7 @@ resource vmss 'Microsoft.Compute/virtualMachineScaleSets@2024-07-01' = {
 resource autoscale 'Microsoft.Insights/autoscaleSettings@2022-10-01' = {
   name: '\${name}-autoscale'
   location: location
+  tags: tags
   properties: {
     targetResourceUri: vmss.id
     profiles: [

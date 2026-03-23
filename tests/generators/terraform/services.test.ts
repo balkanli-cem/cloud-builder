@@ -1,16 +1,31 @@
 import { renderServiceTerraform } from '../../../src/generators/terraform/services';
-import type { AzureService } from '../../../src/types';
+import type { AzureService, ProjectConfig } from '../../../src/types';
+
+const baseProject = (): ProjectConfig => ({
+  projectName: 'testproj',
+  region: 'westeurope',
+  resourceGroupName: 'rg-test',
+  network: {
+    vnetName: 'vnet-test',
+    addressSpace: '10.0.0.0/16',
+    subnets: [
+      { name: 'Backend', addressPrefix: '10.0.1.0/24' },
+      { name: 'DB', addressPrefix: '10.0.2.0/24' },
+    ],
+  },
+  services: [],
+});
 
 describe('renderServiceTerraform', () => {
   it('returns empty string for empty array', () => {
-    expect(renderServiceTerraform([])).toBe('');
+    expect(renderServiceTerraform(baseProject(), [])).toBe('');
   });
 
   it('emits one cosmos-db resource for single service', () => {
     const services: AzureService[] = [
       { type: 'cosmos-db', name: 'my-app-cosmos', subnetPlacement: 'DB', config: {} },
     ];
-    const out = renderServiceTerraform(services);
+    const out = renderServiceTerraform(baseProject(), services);
     expect(out).toContain('azurerm_cosmosdb_account');
     expect(out).toContain('my-app-cosmos');
     expect(out).toContain('azurerm_subnet.db.id');
@@ -21,7 +36,7 @@ describe('renderServiceTerraform', () => {
       { type: 'cosmos-db', name: 'main-db', subnetPlacement: 'DB', config: {} },
       { type: 'cosmos-db', name: 'analytics-db', subnetPlacement: 'Backend', config: {} },
     ];
-    const out = renderServiceTerraform(services);
+    const out = renderServiceTerraform(baseProject(), services);
     expect(out).toContain('main-db');
     expect(out).toContain('analytics-db');
     expect((out.match(/resource "azurerm_cosmosdb_account"/g) ?? []).length).toBe(2);
@@ -32,7 +47,7 @@ describe('renderServiceTerraform', () => {
       { type: 'key-vault', name: 'kv-a', subnetPlacement: 'Backend', config: {} },
       { type: 'key-vault', name: 'kv-b', subnetPlacement: 'Backend', config: {} },
     ];
-    const out = renderServiceTerraform(services);
+    const out = renderServiceTerraform(baseProject(), services);
     const dataBlockCount = (out.match(/data "azurerm_client_config" "current"/g) ?? []).length;
     expect(dataBlockCount).toBe(1);
     expect(out).toContain('kv-a');
@@ -55,7 +70,7 @@ describe('renderServiceTerraform', () => {
         },
       },
     ];
-    const out = renderServiceTerraform(services);
+    const out = renderServiceTerraform(baseProject(), services);
     expect(out).toContain('azurerm_public_ip');
     expect(out).toContain('azurerm_network_interface');
     expect(out).toContain('azurerm_linux_virtual_machine');
@@ -79,7 +94,7 @@ describe('renderServiceTerraform', () => {
         },
       },
     ];
-    const out = renderServiceTerraform(services);
+    const out = renderServiceTerraform(baseProject(), services);
     expect(out).toContain('azurerm_linux_virtual_machine_scale_set');
     expect(out).toContain('azurerm_monitor_autoscale_setting');
     expect(out).toContain('minimum = 2');

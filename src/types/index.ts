@@ -15,12 +15,53 @@ export interface NetworkConfig {
   subnets: SubnetConfig[];
 }
 
+/** Optional naming and tagging for generated IaC (Bicep + Terraform). */
+export interface IacConventions {
+  /** Prepended to logical resource names (sanitized). */
+  namePrefix?: string;
+  /** Appended to logical resource names (sanitized). */
+  nameSuffix?: string;
+  /** Merged with a default `Project` tag. */
+  tags?: Record<string, string>;
+}
+
+/** “Prod-ready” switches: SKUs, zones, diagnostics, private endpoints. */
+export interface IacProduction {
+  /** Create Log Analytics + monitor diagnostic settings for supported resources. */
+  enableDiagnostics?: boolean;
+  /** Add private endpoints for Storage + Key Vault where implemented (requires subnet). */
+  enablePrivateEndpoints?: boolean;
+  /** Set on Azure SQL database when SKU supports it. */
+  sqlZoneRedundant?: boolean;
+  /** VM / VMSS: pin to zone `"1"` | `"2"` | `"3"` (empty = no zone). */
+  vmAvailabilityZone?: string;
+  /** App Service plan SKU, e.g. B1, P1v3. */
+  appServicePlanSku?: string;
+  /** AKS default node pool VM size. */
+  aksNodeVmSize?: string;
+  /** AKS default node pool node count. */
+  aksNodeCount?: number;
+  /** Storage account replication: LRS, GRS, ZRS, GZRS, RAGRS, RAGZRS. */
+  storageReplication?: string;
+  /** API Management SKU name, e.g. Developer_1, Standard_1. */
+  apimSku?: string;
+  /** When true, request Cosmos free tier (if available in region). */
+  cosmosEnableFreeTier?: boolean;
+}
+
+export interface IacSettings {
+  conventions?: IacConventions;
+  production?: IacProduction;
+}
+
 export interface ProjectConfig {
   projectName: string;
   region: AzureRegion;
   resourceGroupName: string;
   network: NetworkConfig;
   services: AzureService[];
+  /** Advanced IaC: tags, naming, SKUs, diagnostics. */
+  iac?: IacSettings;
 }
 
 export type AzureServiceType =

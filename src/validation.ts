@@ -123,6 +123,62 @@ export const generateValidation: ValidationChain[] = [
   body('config.services')
     .isArray({ min: 1 })
     .withMessage('services must be a non-empty array'),
+  // Optional IaC (advanced)
+  body('config.iac.conventions.namePrefix')
+    .optional()
+    .trim()
+    .isLength({ max: 128 })
+    .withMessage('iac.conventions.namePrefix too long'),
+  body('config.iac.conventions.nameSuffix')
+    .optional()
+    .trim()
+    .isLength({ max: 128 })
+    .withMessage('iac.conventions.nameSuffix too long'),
+  body('config.iac.production.enableDiagnostics')
+    .optional()
+    .isBoolean()
+    .withMessage('iac.production.enableDiagnostics must be boolean'),
+  body('config.iac.production.enablePrivateEndpoints')
+    .optional()
+    .isBoolean()
+    .withMessage('iac.production.enablePrivateEndpoints must be boolean'),
+  body('config.iac.production.sqlZoneRedundant')
+    .optional()
+    .isBoolean()
+    .withMessage('iac.production.sqlZoneRedundant must be boolean'),
+  body('config.iac.production.cosmosEnableFreeTier')
+    .optional()
+    .isBoolean()
+    .withMessage('iac.production.cosmosEnableFreeTier must be boolean'),
+  body('config.iac.production.vmAvailabilityZone')
+    .optional()
+    .trim()
+    .isIn(['', '1', '2', '3'])
+    .withMessage('iac.production.vmAvailabilityZone must be "", "1", "2", or "3"'),
+  body('config.iac.production.appServicePlanSku')
+    .optional()
+    .trim()
+    .isLength({ max: 64 })
+    .withMessage('iac.production.appServicePlanSku too long'),
+  body('config.iac.production.aksNodeVmSize')
+    .optional()
+    .trim()
+    .isLength({ max: 128 })
+    .withMessage('iac.production.aksNodeVmSize too long'),
+  body('config.iac.production.aksNodeCount')
+    .optional()
+    .isInt({ min: 1, max: 1000 })
+    .withMessage('iac.production.aksNodeCount must be 1–1000'),
+  body('config.iac.production.storageReplication')
+    .optional()
+    .trim()
+    .isLength({ max: 16 })
+    .withMessage('iac.production.storageReplication too long'),
+  body('config.iac.production.apimSku')
+    .optional()
+    .trim()
+    .isLength({ max: 64 })
+    .withMessage('iac.production.apimSku too long'),
 ];
 
 export const generationIdParamValidation: ValidationChain[] = [
@@ -148,6 +204,21 @@ export function validateGenerateConfigBody(config: ProjectConfig): string | null
   if (config.network.subnets.length === 0) {
     return 'network.subnets must include at least one subnet.';
   }
+  const tags = config.iac?.conventions?.tags;
+  if (tags != null) {
+    if (typeof tags !== 'object' || Array.isArray(tags)) {
+      return 'iac.conventions.tags must be an object of string values.';
+    }
+    for (const [k, v] of Object.entries(tags)) {
+      if (typeof v !== 'string') {
+        return `iac.conventions.tags: value for "${k}" must be a string.`;
+      }
+      if (k.length > 256) {
+        return 'iac.conventions.tags: key too long (max 256).';
+      }
+    }
+  }
+
   for (const svc of config.services) {
     const mode = getNetworkMode(svc.type);
     if (mode === 'subnet_required') {

@@ -1,4 +1,6 @@
+import { useId } from 'react';
 import type { ProjectConfig } from '../types';
+import type { IacFormState } from '../iacForm';
 
 const REGION_LABELS: Record<ProjectConfig['region'], string> = {
   westeurope: 'West Europe',
@@ -14,6 +16,40 @@ type Props = {
   onGenerate: (format: 'bicep' | 'terraform') => void;
   onBack: () => void;
   onBackToStart: () => void;
+  iacPanelOpen: boolean;
+  setIacPanelOpen: (open: boolean) => void;
+  iacForm: IacFormState;
+  setIacForm: React.Dispatch<React.SetStateAction<IacFormState>>;
+};
+
+const labelStyle: React.CSSProperties = { display: 'block', color: '#94a3b8', fontSize: '0.75rem', marginBottom: '0.25rem' };
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  maxWidth: '28rem',
+  padding: '0.35rem 0.5rem',
+  borderRadius: '4px',
+  border: '1px solid #475569',
+  background: '#0f172a',
+  color: '#e2e8f0',
+  fontSize: '0.8125rem',
+};
+
+const primaryButton: React.CSSProperties = {
+  padding: '0.5rem 1rem',
+  background: '#3b82f6',
+  border: 'none',
+  borderRadius: '6px',
+  color: 'white',
+  fontWeight: 600,
+  cursor: 'pointer',
+};
+const secondaryButton: React.CSSProperties = {
+  padding: '0.5rem 1rem',
+  background: 'transparent',
+  border: '1px solid #475569',
+  borderRadius: '6px',
+  color: '#e2e8f0',
+  cursor: 'pointer',
 };
 
 export function StepSummary({
@@ -23,7 +59,12 @@ export function StepSummary({
   onGenerate,
   onBack,
   onBackToStart,
+  iacPanelOpen,
+  setIacPanelOpen,
+  iacForm,
+  setIacForm,
 }: Props) {
+  const iacDetailsId = useId();
   const bicepDownloaded = downloadedFormats.includes('bicep');
   const terraformDownloaded = downloadedFormats.includes('terraform');
   const otherFormat: 'bicep' | 'terraform' = bicepDownloaded ? 'terraform' : 'bicep';
@@ -48,6 +89,167 @@ export function StepSummary({
           ))}
         </div>
       </div>
+
+      <div style={{ marginBottom: '1rem' }}>
+        <button
+          type="button"
+          aria-expanded={iacPanelOpen}
+          aria-controls={iacDetailsId}
+          onClick={() => setIacPanelOpen(!iacPanelOpen)}
+          style={{
+            ...secondaryButton,
+            width: '100%',
+            maxWidth: '28rem',
+            textAlign: 'left' as const,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          <span>Advanced IaC (tags, SKUs, diagnostics)</span>
+          <span style={{ color: '#64748b' }}>{iacPanelOpen ? '▲' : '▼'}</span>
+        </button>
+        {iacPanelOpen && (
+          <div
+            id={iacDetailsId}
+            style={{
+              marginTop: '0.75rem',
+              padding: '1rem',
+              background: '#0f172a',
+              borderRadius: '8px',
+              border: '1px solid #334155',
+              maxWidth: '32rem',
+            }}
+          >
+            <p style={{ margin: '0 0 0.75rem 0', color: '#94a3b8', fontSize: '0.8125rem' }}>
+              Optional naming and “prod-ready” switches. Merged into generated Bicep and Terraform (default tags include{' '}
+              <code style={{ color: '#cbd5e1' }}>Project</code>).
+            </p>
+            <div style={{ marginBottom: '0.75rem' }}>
+              <label style={labelStyle}>Name prefix / suffix (sanitized in output)</label>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <input
+                  style={{ ...inputStyle, maxWidth: '12rem' }}
+                  placeholder="prefix"
+                  value={iacForm.namePrefix}
+                  onChange={(e) => setIacForm((f) => ({ ...f, namePrefix: e.target.value }))}
+                />
+                <input
+                  style={{ ...inputStyle, maxWidth: '12rem' }}
+                  placeholder="suffix"
+                  value={iacForm.nameSuffix}
+                  onChange={(e) => setIacForm((f) => ({ ...f, nameSuffix: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div style={{ marginBottom: '0.75rem' }}>
+              <label style={labelStyle}>Extra tags (one key=value per line)</label>
+              <textarea
+                style={{ ...inputStyle, minHeight: '4rem', fontFamily: 'monospace' }}
+                placeholder={'Env=dev\nOwner=team-a'}
+                value={iacForm.tagsLines}
+                onChange={(e) => setIacForm((f) => ({ ...f, tagsLines: e.target.value }))}
+              />
+            </div>
+            <div style={{ display: 'grid', gap: '0.5rem', marginBottom: '0.75rem' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: '#e2e8f0', fontSize: '0.875rem' }}>
+                <input
+                  type="checkbox"
+                  checked={iacForm.enableDiagnostics}
+                  onChange={(e) => setIacForm((f) => ({ ...f, enableDiagnostics: e.target.checked }))}
+                />
+                Enable diagnostics (Log Analytics + diagnostic settings; Terraform)
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: '#e2e8f0', fontSize: '0.875rem' }}>
+                <input
+                  type="checkbox"
+                  checked={iacForm.enablePrivateEndpoints}
+                  onChange={(e) => setIacForm((f) => ({ ...f, enablePrivateEndpoints: e.target.checked }))}
+                />
+                Private endpoints (Storage blob + Key Vault where implemented)
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: '#e2e8f0', fontSize: '0.875rem' }}>
+                <input
+                  type="checkbox"
+                  checked={iacForm.sqlZoneRedundant}
+                  onChange={(e) => setIacForm((f) => ({ ...f, sqlZoneRedundant: e.target.checked }))}
+                />
+                SQL database zone-redundant (if SKU supports it)
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', color: '#e2e8f0', fontSize: '0.875rem' }}>
+                <input
+                  type="checkbox"
+                  checked={iacForm.cosmosEnableFreeTier}
+                  onChange={(e) => setIacForm((f) => ({ ...f, cosmosEnableFreeTier: e.target.checked }))}
+                />
+                Cosmos DB free tier (when available in region)
+              </label>
+            </div>
+            <div style={{ marginBottom: '0.75rem' }}>
+              <label style={labelStyle}>VM / VMSS availability zone (empty = regional)</label>
+              <select
+                style={inputStyle}
+                value={iacForm.vmAvailabilityZone}
+                onChange={(e) =>
+                  setIacForm((f) => ({ ...f, vmAvailabilityZone: e.target.value as IacFormState['vmAvailabilityZone'] }))
+                }
+              >
+                <option value="">None</option>
+                <option value="1">Zone 1</option>
+                <option value="2">Zone 2</option>
+                <option value="3">Zone 3</option>
+              </select>
+            </div>
+            <div style={{ display: 'grid', gap: '0.5rem', gridTemplateColumns: 'repeat(auto-fill, minmax(11rem, 1fr))' }}>
+              <div>
+                <label style={labelStyle}>App Service plan SKU</label>
+                <input
+                  style={inputStyle}
+                  value={iacForm.appServicePlanSku}
+                  onChange={(e) => setIacForm((f) => ({ ...f, appServicePlanSku: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>AKS node size</label>
+                <input
+                  style={inputStyle}
+                  value={iacForm.aksNodeVmSize}
+                  onChange={(e) => setIacForm((f) => ({ ...f, aksNodeVmSize: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>AKS node count</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={1000}
+                  style={inputStyle}
+                  value={iacForm.aksNodeCount}
+                  onChange={(e) => setIacForm((f) => ({ ...f, aksNodeCount: parseInt(e.target.value, 10) || 1 }))}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>Storage replication</label>
+                <input
+                  style={inputStyle}
+                  placeholder="LRS, ZRS, GRS…"
+                  value={iacForm.storageReplication}
+                  onChange={(e) => setIacForm((f) => ({ ...f, storageReplication: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>APIM SKU (e.g. Developer_1)</label>
+                <input
+                  style={inputStyle}
+                  value={iacForm.apimSku}
+                  onChange={(e) => setIacForm((f) => ({ ...f, apimSku: e.target.value }))}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
       <p style={{ color: '#94a3b8', marginBottom: '0.75rem' }}>Choose output format and generate:</p>
       <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
         <button
@@ -104,21 +306,3 @@ export function StepSummary({
     </section>
   );
 }
-
-const primaryButton: React.CSSProperties = {
-  padding: '0.5rem 1rem',
-  background: '#3b82f6',
-  border: 'none',
-  borderRadius: '6px',
-  color: 'white',
-  fontWeight: 600,
-  cursor: 'pointer',
-};
-const secondaryButton: React.CSSProperties = {
-  padding: '0.5rem 1rem',
-  background: 'transparent',
-  border: '1px solid #475569',
-  borderRadius: '6px',
-  color: '#e2e8f0',
-  cursor: 'pointer',
-};

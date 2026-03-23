@@ -1,5 +1,6 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import type { ProjectConfig, NetworkConfig, AzureService, ServiceEntry } from './types';
+import { DEFAULT_IAC_FORM, iacSettingsFromForm } from './iacForm';
 import { StepProject } from './steps/StepProject';
 import { StepNetwork } from './steps/StepNetwork';
 import { StepServices } from './steps/StepServices';
@@ -53,6 +54,8 @@ export default function App() {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [downloadedFormats, setDownloadedFormats] = useState<('bicep' | 'terraform')[]>([]);
+  const [iacPanelOpen, setIacPanelOpen] = useState(false);
+  const [iacForm, setIacForm] = useState(() => ({ ...DEFAULT_IAC_FORM }));
 
   const setToken = useCallback((t: string) => {
     setTokenState(t);
@@ -82,6 +85,8 @@ export default function App() {
     setServices([]);
     setError(null);
     setDownloadedFormats([]);
+    setIacPanelOpen(false);
+    setIacForm({ ...DEFAULT_IAC_FORM });
   }, []);
 
   useEffect(() => {
@@ -99,16 +104,21 @@ export default function App() {
     setCatalog(data.services || []);
   }, [token, catalog.length, logout]);
 
-  const config: ProjectConfig | null =
-    projectName && network && services.length > 0
-      ? {
-          projectName,
-          resourceGroupName: resourceGroupName || `${projectName}-rg`,
-          region,
-          network,
-          services,
-        }
-      : null;
+  const config: ProjectConfig | null = useMemo(() => {
+    if (!projectName || !network || services.length === 0) return null;
+    const base: ProjectConfig = {
+      projectName,
+      resourceGroupName: resourceGroupName || `${projectName}-rg`,
+      region,
+      network,
+      services,
+    };
+    if (iacPanelOpen) {
+      const iac = iacSettingsFromForm(iacForm);
+      if (Object.keys(iac).length > 0) base.iac = iac;
+    }
+    return base;
+  }, [projectName, resourceGroupName, region, network, services, iacPanelOpen, iacForm]);
 
   if (!token) {
     const clearResetUrl = () => {
@@ -256,6 +266,10 @@ export default function App() {
           generating={generating}
           error={error}
           downloadedFormats={downloadedFormats}
+          iacPanelOpen={iacPanelOpen}
+          setIacPanelOpen={setIacPanelOpen}
+          iacForm={iacForm}
+          setIacForm={setIacForm}
           onGenerate={async (format: 'bicep' | 'terraform') => {
             setError(null);
             setGenerating(true);

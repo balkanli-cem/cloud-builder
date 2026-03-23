@@ -7,7 +7,7 @@ Interactive Azure infrastructure builder that generates **Bicep** or **Terraform
 1. **Project** — Name, resource group, Azure region (West Europe, Sweden Central, Belgium Central).
 2. **Network** — Use the default VNet layout or customize: VNet name, address space (CIDR), and each subnet’s address prefix (e.g. Frontend, Backend, DB). Available in both CLI and web app.
 3. **Services** — Select Azure services, set resource names and subnet placement.
-4. **Summary** — Review, choose Bicep or Terraform, then generate.
+4. **Summary** — Review, choose Bicep or Terraform, then generate. In the web app you can expand **Advanced IaC** to set optional tags, name prefix/suffix, SKUs, availability zones, diagnostics, and private endpoints (see below).
 
 Generated files are written to `output/<projectName>/bicep/` or `output/<projectName>/terraform/`. When running as the web app with **AZURE_SQL_CONNECTION_STRING** set, each generation is stored in an Azure SQL table for history.
 
@@ -68,10 +68,28 @@ Open **http://localhost:3000**. Complete the steps and download Bicep or Terrafo
 - **Virtual Machine (VM)** — Optional public IP, NIC name, VM size, OS (Linux/Windows), admin username, OS disk size.  
 - **Virtual Machine Scale Set (VMSS)** — NIC name prefix, VM size, OS, min/max instances, and horizontal autoscale: scale-out when CPU % above a threshold, scale-in when CPU % below a threshold.  
 
+## Advanced IaC (`config.iac`)
+
+Optional JSON (CLI/API) or the **Advanced IaC** panel (web) configures:
+
+| Area | What it does |
+|------|----------------|
+| **Conventions** | `namePrefix` / `nameSuffix` — sanitized and applied to logical resource names. `tags` — merged with a default `Project` tag; Terraform uses `default_tags` on the `azurerm` provider where supported. |
+| **Diagnostics** | `production.enableDiagnostics` — Terraform: Log Analytics workspace + monitor diagnostic settings on supported resources (cheap “prod-ready” logging). |
+| **Private endpoints** | `production.enablePrivateEndpoints` — adds private endpoints for Storage (blob) and Key Vault where implemented; requires a valid subnet (Private Link DNS zones are not generated—add in your landing zone). |
+| **SQL** | `production.sqlZoneRedundant` — sets zone redundancy on the database when the SKU supports it (serverless GP may have constraints—validate in target region). |
+| **VM / VMSS** | `production.vmAvailabilityZone` — `"1"` \| `"2"` \| `"3"` or omit for regional. |
+| **SKUs** | App Service plan (`appServicePlanSku`), AKS node pool (`aksNodeVmSize`, `aksNodeCount`), storage replication (`LRS`, `ZRS`, …), API Management (`apimSku`, e.g. `Developer_1` → name `Developer`, capacity `1` in Bicep). |
+| **Cosmos** | `production.cosmosEnableFreeTier` — request free tier when available. |
+
+**Bicep note:** `main.bicep` declares shared parameters (e.g. AKS/SQL/APIM) even if those services are not in the diagram; the linter may warn about unused parameters—safe to ignore or trim locally.
+
+**App Service:** Generated modules use a fixed plan **tier** in Bicep (`Basic`) while the SKU **name** follows `appServicePlanSku`. If you use Premium v3 SKUs (`P1v3`, …), adjust the plan **tier** in the module to match (`PremiumV3`).
+
 ## Output layout
 
 - **Bicep:** `main.bicep` plus `modules/network.bicep` and one module per service type (e.g. `cosmos-db.bicep`). Multiple instances of the same type each get their own deployment in `main.bicep`.
-- **Terraform:** `main.tf`, `variables.tf`, `outputs.tf`, `network.tf`, and one `.tf` file per service type. Multiple instances of the same type are emitted as multiple resources in that file.
+- **Terraform:** `main.tf`, `variables.tf`, `outputs.tf`, `network.tf`, optional `diagnostics.tf`, and one `.tf` file per service type. Multiple instances of the same type are emitted as multiple resources in that file.
 
 ## Tests
 

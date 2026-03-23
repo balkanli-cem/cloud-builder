@@ -51,12 +51,40 @@ export interface AzureService {
   config: Record<string, unknown>;
 }
 
+/** Optional naming and tagging for generated IaC (Bicep + Terraform). */
+export interface IacConventions {
+  namePrefix?: string;
+  nameSuffix?: string;
+  tags?: Record<string, string>;
+}
+
+/** “Prod-ready” switches: SKUs, zones, diagnostics, private endpoints. */
+export interface IacProduction {
+  enableDiagnostics?: boolean;
+  enablePrivateEndpoints?: boolean;
+  sqlZoneRedundant?: boolean;
+  vmAvailabilityZone?: string;
+  appServicePlanSku?: string;
+  aksNodeVmSize?: string;
+  aksNodeCount?: number;
+  storageReplication?: string;
+  apimSku?: string;
+  cosmosEnableFreeTier?: boolean;
+}
+
+export interface IacSettings {
+  conventions?: IacConventions;
+  production?: IacProduction;
+}
+
 export interface ProjectConfig {
   projectName: string;
   region: AzureRegion;
   resourceGroupName: string;
   network: NetworkConfig;
   services: AzureService[];
+  /** Advanced IaC: tags, naming, SKUs, diagnostics. */
+  iac?: IacSettings;
 }
 
 /** Matches backend catalog: shared VNet subnet required vs optional (e.g. AKS managed networking). */
