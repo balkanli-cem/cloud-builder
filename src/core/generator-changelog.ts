@@ -12,6 +12,14 @@ export interface GeneratorChangelogEntry {
 export const GENERATOR_CHANGELOG: GeneratorChangelogEntry[] = [
   {
     date: '2025-03-24',
+    title: 'Services step UI',
+    bullets: [
+      'Service selection uses color-coded cards (Compute, Containers, Data, Web & app, Integration, Security) instead of plain checkboxes.',
+      'Catalog entries include `uiCategory` for styling; click the card to toggle selection.',
+    ],
+  },
+  {
+    date: '2025-03-24',
     title: 'Docs & trust',
     bullets: [
       'Services step: per-service “What this creates” (cost levers, destroy order, Azure links).',

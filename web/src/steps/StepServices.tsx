@@ -1,16 +1,71 @@
 import { useState, useEffect } from 'react';
-import type { NetworkConfig, AzureService, ServiceEntry, VMConfig, VMSSConfig } from '../types';
+import type { NetworkConfig, AzureService, ServiceEntry, ServiceUiCategory, VMConfig, VMSSConfig } from '../types';
+
+type CategoryVisual = {
+  border: string;
+  surface: string;
+  badgeBg: string;
+  badgeText: string;
+  label: string;
+};
+
+const CATEGORY_UI: Record<ServiceUiCategory, CategoryVisual> = {
+  compute: {
+    label: 'Compute',
+    border: '#ea580c',
+    surface: 'linear-gradient(160deg, rgba(234, 88, 12, 0.14) 0%, rgba(15, 23, 42, 0.92) 55%)',
+    badgeBg: 'rgba(234, 88, 12, 0.28)',
+    badgeText: '#fdba74',
+  },
+  containers: {
+    label: 'Containers',
+    border: '#7c3aed',
+    surface: 'linear-gradient(160deg, rgba(124, 58, 237, 0.14) 0%, rgba(15, 23, 42, 0.92) 55%)',
+    badgeBg: 'rgba(124, 58, 237, 0.28)',
+    badgeText: '#c4b5fd',
+  },
+  data: {
+    label: 'Data',
+    border: '#ca8a04',
+    surface: 'linear-gradient(160deg, rgba(202, 138, 4, 0.1) 0%, rgba(15, 23, 42, 0.92) 55%)',
+    badgeBg: 'rgba(202, 138, 4, 0.22)',
+    badgeText: '#fde047',
+  },
+  web: {
+    label: 'Web & app',
+    border: '#0284c7',
+    surface: 'linear-gradient(160deg, rgba(2, 132, 199, 0.12) 0%, rgba(15, 23, 42, 0.92) 55%)',
+    badgeBg: 'rgba(2, 132, 199, 0.22)',
+    badgeText: '#7dd3fc',
+  },
+  integration: {
+    label: 'Integration',
+    border: '#db2777',
+    surface: 'linear-gradient(160deg, rgba(219, 39, 119, 0.1) 0%, rgba(15, 23, 42, 0.92) 55%)',
+    badgeBg: 'rgba(219, 39, 119, 0.22)',
+    badgeText: '#f9a8d4',
+  },
+  security: {
+    label: 'Security',
+    border: '#059669',
+    surface: 'linear-gradient(160deg, rgba(5, 150, 105, 0.1) 0%, rgba(15, 23, 42, 0.92) 55%)',
+    badgeBg: 'rgba(5, 150, 105, 0.22)',
+    badgeText: '#6ee7b7',
+  },
+};
 
 function WhatCreatesPanel({ entry }: { entry: ServiceEntry }) {
   const w = entry.whatCreates;
   if (!w) return null;
   return (
     <details
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
       style={{
-        marginLeft: '1.5rem',
-        marginTop: '0.35rem',
-        maxWidth: '42rem',
-        borderLeft: '2px solid #334155',
+        marginTop: '0.5rem',
+        marginLeft: 0,
+        maxWidth: '100%',
+        borderLeft: '2px solid rgba(148, 163, 184, 0.35)',
         paddingLeft: '0.65rem',
       }}
     >
@@ -30,7 +85,10 @@ function WhatCreatesPanel({ entry }: { entry: ServiceEntry }) {
         <p style={{ margin: 0, fontSize: '0.75rem', color: '#64748b' }}>
           Estimates are not guarantees—use Azure Pricing Calculator for your region and SKUs.
         </p>
-        <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+        <div
+          style={{ marginTop: '0.5rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}
+          onClick={(e) => e.stopPropagation()}
+        >
           <a href={w.pricingUrl} target="_blank" rel="noopener noreferrer" style={linkStyle}>
             Azure pricing
           </a>
@@ -145,29 +203,134 @@ export function StepServices({
   return (
     <section>
       <h2 style={{ fontSize: '1.125rem', marginBottom: '1rem' }}>Services</h2>
-      <p style={{ color: '#94a3b8', marginBottom: '1rem', fontSize: '0.875rem' }}>
-        Select Azure services. Most use a subnet from your network design; some (e.g. AKS) can use managed networking instead.
+      <p style={{ color: '#94a3b8', marginBottom: '0.75rem', fontSize: '0.875rem' }}>
+        Click a card to include that service in your generation. Colors group services by Azure family (compute, containers, data, etc.).
       </p>
-      <div style={{ marginBottom: '1rem' }}>
-        {catalog.map((entry) => (
-          <div key={entry.type} style={{ marginBottom: '0.75rem' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: entry.integrationNotes ? '0.25rem' : 0 }}>
-              <input
-                type="checkbox"
-                checked={selectedTypes.has(entry.type)}
-                onChange={() => toggleService(entry.type)}
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: '0.5rem 1rem',
+          marginBottom: '1rem',
+          fontSize: '0.75rem',
+          color: '#94a3b8',
+          alignItems: 'center',
+        }}
+      >
+        <span style={{ color: '#64748b' }}>Legend:</span>
+        {(Object.keys(CATEGORY_UI) as ServiceUiCategory[]).map((key) => {
+          const c = CATEGORY_UI[key];
+          return (
+            <span key={key} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+              <span
+                style={{
+                  width: '10px',
+                  height: '10px',
+                  borderRadius: '2px',
+                  background: c.border,
+                  boxShadow: `0 0 0 1px ${c.border}`,
+                }}
               />
-              <span>{entry.label}</span>
-              <span style={{ color: '#64748b', fontSize: '0.8125rem' }}>{entry.description}</span>
-            </label>
-            {entry.integrationNotes && (
-              <div style={{ marginLeft: '1.5rem', fontSize: '0.75rem', color: '#64748b', maxWidth: '42rem' }}>
-                {entry.integrationNotes}
+              {c.label}
+            </span>
+          );
+        })}
+      </div>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+          gap: '0.75rem',
+          marginBottom: '1rem',
+        }}
+      >
+        {catalog.map((entry) => {
+          const selected = selectedTypes.has(entry.type);
+          const cat = CATEGORY_UI[entry.uiCategory];
+          return (
+            <div
+              key={entry.type}
+              role="button"
+              tabIndex={0}
+              aria-pressed={selected}
+              aria-label={
+                selected
+                  ? `${entry.label} selected. Activate to remove from generation.`
+                  : `${entry.label} not selected. Activate to add to generation.`
+              }
+              onClick={() => toggleService(entry.type)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  toggleService(entry.type);
+                }
+              }}
+              style={{
+                position: 'relative',
+                borderRadius: '10px',
+                border: `2px solid ${cat.border}`,
+                background: cat.surface,
+                padding: '0.85rem 0.9rem',
+                cursor: 'pointer',
+                outline: 'none',
+                boxShadow: selected
+                  ? '0 0 0 2px rgba(96, 165, 250, 0.55), 0 8px 24px rgba(0, 0, 0, 0.35)'
+                  : '0 4px 16px rgba(0, 0, 0, 0.2)',
+                transition: 'box-shadow 0.15s ease, border-color 0.15s ease',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
+                <div style={{ minWidth: 0 }}>
+                  <span
+                    style={{
+                      display: 'inline-block',
+                      fontSize: '0.65rem',
+                      fontWeight: 600,
+                      letterSpacing: '0.04em',
+                      textTransform: 'uppercase',
+                      color: cat.badgeText,
+                      background: cat.badgeBg,
+                      padding: '0.15rem 0.45rem',
+                      borderRadius: '4px',
+                      marginBottom: '0.35rem',
+                    }}
+                  >
+                    {cat.label}
+                  </span>
+                  <div style={{ fontWeight: 600, color: '#f1f5f9', fontSize: '0.95rem', lineHeight: 1.3 }}>{entry.label}</div>
+                  <div style={{ color: '#94a3b8', fontSize: '0.8125rem', marginTop: '0.35rem', lineHeight: 1.45 }}>
+                    {entry.description}
+                  </div>
+                </div>
+                <span
+                  aria-hidden="true"
+                  style={{
+                    flexShrink: 0,
+                    width: '1.35rem',
+                    height: '1.35rem',
+                    borderRadius: '6px',
+                    border: selected ? '2px solid #60a5fa' : '2px solid #475569',
+                    background: selected ? 'rgba(96, 165, 250, 0.2)' : 'rgba(15, 23, 42, 0.5)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: selected ? '#93c5fd' : 'transparent',
+                    fontSize: '0.85rem',
+                    fontWeight: 700,
+                  }}
+                >
+                  {selected ? '✓' : ''}
+                </span>
               </div>
-            )}
-            <WhatCreatesPanel entry={entry} />
-          </div>
-        ))}
+              {entry.integrationNotes && (
+                <div style={{ marginTop: '0.6rem', fontSize: '0.75rem', color: '#64748b', lineHeight: 1.45 }}>
+                  {entry.integrationNotes}
+                </div>
+              )}
+              <WhatCreatesPanel entry={entry} />
+            </div>
+          );
+        })}
       </div>
       {selectedTypes.size > 0 && (
         <div style={{ background: '#1e293b', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>

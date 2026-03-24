@@ -115,4 +115,4 @@ Terraform in **[deploy/terraform/](deploy/terraform/)** provisions the Web App (
 
 ## License
 
-MIT (or your choice).
+To be determined.

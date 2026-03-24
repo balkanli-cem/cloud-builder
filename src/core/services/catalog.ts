@@ -4,6 +4,18 @@ import type { AzureServiceType } from '../../types/index';
 /** Shared VNet usage: required = must use a wizard subnet; optional = can use managed networking (e.g. AKS Kubenet) or attach to a subnet. */
 export type ServiceNetworkMode = 'subnet_required' | 'subnet_optional';
 
+/**
+ * UI grouping (Azure RP–aligned) for card colors on the Services step.
+ * compute ≈ Microsoft.Compute · containers ≈ AKS / Container Apps · data ≈ databases & storage · web ≈ App Service · integration · security.
+ */
+export type ServiceUiCategory =
+  | 'compute'
+  | 'containers'
+  | 'data'
+  | 'web'
+  | 'integration'
+  | 'security';
+
 /** In-app “what this creates”: cost, teardown, and links (not legal/financial advice). */
 export interface ServiceWhatCreates {
   /** Short list of Azure resources emitted by the generator for this type. */
@@ -24,6 +36,8 @@ export interface ServiceEntry {
   description: string;
   defaultSubnet: string;
   networkMode: ServiceNetworkMode;
+  /** Card color group on the Services step. */
+  uiCategory: ServiceUiCategory;
   /** How this service often connects to others (shown in UI only). */
   integrationNotes?: string;
   whatCreates?: ServiceWhatCreates;
@@ -36,6 +50,7 @@ export const SERVICE_CATALOG: ServiceEntry[] = [
     description: 'Managed PaaS for web apps and APIs',
     defaultSubnet: 'Frontend',
     networkMode: 'subnet_required',
+    uiCategory: 'web',
     integrationNotes: 'Often fronted by API Management; connects to backends in other subnets via private endpoints.',
     whatCreates: {
       createsSummary: 'App Service plan (Linux) and Linux web app with VNet integration to your subnet.',
@@ -51,6 +66,7 @@ export const SERVICE_CATALOG: ServiceEntry[] = [
     description: 'Managed Kubernetes — can use its own networking (Kubenet) or your VNet (Azure CNI)',
     defaultSubnet: 'Backend',
     networkMode: 'subnet_optional',
+    uiCategory: 'containers',
     integrationNotes: 'Typical pattern: ingress in-cluster + private link to Key Vault, ACR, or Azure SQL. App Service or API Management can sit in front.',
     whatCreates: {
       createsSummary: 'AKS cluster with one system node pool (Kubenet or Azure CNI + subnet).',
@@ -66,6 +82,7 @@ export const SERVICE_CATALOG: ServiceEntry[] = [
     description: 'Fully managed relational database',
     defaultSubnet: 'DB',
     networkMode: 'subnet_required',
+    uiCategory: 'data',
     integrationNotes: 'Private endpoint in DB subnet; allow access from app subnets via VNet rules or private link.',
     whatCreates: {
       createsSummary: 'SQL server (random admin password), serverless GP database, and VNet rule for your subnet.',
@@ -81,6 +98,7 @@ export const SERVICE_CATALOG: ServiceEntry[] = [
     description: 'Globally distributed NoSQL database',
     defaultSubnet: 'DB',
     networkMode: 'subnet_required',
+    uiCategory: 'data',
     integrationNotes: 'Use private endpoint from application subnets; pair with Key Vault for keys.',
     whatCreates: {
       createsSummary: 'Cosmos DB account (SQL API) with VNet filter and regional replica in your region.',
@@ -96,6 +114,7 @@ export const SERVICE_CATALOG: ServiceEntry[] = [
     description: 'Blob, file, queue and table storage',
     defaultSubnet: 'Backend',
     networkMode: 'subnet_required',
+    uiCategory: 'data',
     integrationNotes: 'Restrict to trusted subnets or private endpoints; used by VMs, AKS, and App Service mounts.',
     whatCreates: {
       createsSummary: 'Storage account with network rules; optional private endpoint for blob when enabled in Advanced IaC.',
@@ -111,6 +130,7 @@ export const SERVICE_CATALOG: ServiceEntry[] = [
     description: 'Secrets, keys and certificate management',
     defaultSubnet: 'Backend',
     networkMode: 'subnet_required',
+    uiCategory: 'security',
     integrationNotes: 'Reference from App Service, AKS, or VMs; use private endpoint and managed identities.',
     whatCreates: {
       createsSummary: 'Key Vault (RBAC, soft delete, purge protection) with network ACLs; optional private endpoint.',
@@ -126,6 +146,7 @@ export const SERVICE_CATALOG: ServiceEntry[] = [
     description: 'API gateway and developer portal',
     defaultSubnet: 'Frontend',
     networkMode: 'subnet_required',
+    uiCategory: 'integration',
     integrationNotes: 'External or internal; routes to App Service, AKS ingress, or Container Apps.',
     whatCreates: {
       createsSummary: 'API Management instance in internal VNet mode on your subnet.',
@@ -141,6 +162,7 @@ export const SERVICE_CATALOG: ServiceEntry[] = [
     description: 'Serverless containers with auto-scaling',
     defaultSubnet: 'Backend',
     networkMode: 'subnet_required',
+    uiCategory: 'containers',
     integrationNotes: 'Shares patterns with AKS; often uses Container Apps Environment with dedicated subnet.',
     whatCreates: {
       createsSummary: 'Container Apps Environment (subnet) and a sample container app with external ingress.',
@@ -156,6 +178,7 @@ export const SERVICE_CATALOG: ServiceEntry[] = [
     description: 'Single Linux or Windows VM with configurable NIC and public IP',
     defaultSubnet: 'Backend',
     networkMode: 'subnet_required',
+    uiCategory: 'compute',
     integrationNotes: 'Reach Storage, SQL private endpoints, or peered VNets from the same or connected subnets.',
     whatCreates: {
       createsSummary: 'Optional public IP, NIC, and single Linux or Windows VM (size and disk configurable).',
@@ -171,6 +194,7 @@ export const SERVICE_CATALOG: ServiceEntry[] = [
     description: 'Auto-scaling set of VMs with horizontal scale rules',
     defaultSubnet: 'Backend',
     networkMode: 'subnet_required',
+    uiCategory: 'compute',
     integrationNotes: 'Same as VM: place with backends that call databases or internal APIs.',
     whatCreates: {
       createsSummary: 'Linux or Windows VMSS with autoscale profile (CPU rules) on your subnet.',
