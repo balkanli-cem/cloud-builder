@@ -1,10 +1,8 @@
 import type { ProjectConfig } from '../../types/index';
-import { getIacSettings, tfMapString } from '../../core/iac/conventions';
+import { getIacSettings, omitEnvironmentTag, tfMapString } from '../../core/iac/conventions';
 
 export function renderMainTf(config: ProjectConfig): string {
   const needsRandom = config.services.some(s => s.type === 'azure-sql');
-  const iac = getIacSettings(config);
-
   const randomProvider = needsRandom
     ? `    random = {
       source  = "hashicorp/random"
@@ -12,14 +10,11 @@ export function renderMainTf(config: ProjectConfig): string {
     }\n`
     : '';
 
-  const defaultTagsBlock =
-    Object.keys(iac.tags).length > 0
-      ? `
+  const defaultTagsBlock = `
   default_tags {
-    tags = var.default_tags
+    tags = local.common_tags
   }
-`
-      : '';
+`;
 
   return `terraform {
   required_providers {
@@ -28,6 +23,10 @@ export function renderMainTf(config: ProjectConfig): string {
       version = "~> 3.0"
     }
 ${randomProvider}  }
+}
+
+locals {
+  common_tags = merge(var.default_tags, { Environment = var.environment })
 }
 
 provider "azurerm" {
@@ -48,6 +47,7 @@ resource "azurerm_resource_group" "main" {
 
 export function renderVariablesTf(config: ProjectConfig): string {
   const iac = getIacSettings(config);
+  const tagsForTf = omitEnvironmentTag(iac.tags);
   const hasVmOrVmss = config.services.some(s => s.type === 'vm' || s.type === 'vmss');
   const vmVariables = hasVmOrVmss
     ? `
@@ -66,16 +66,19 @@ variable "admin_password" {
 `
     : '';
 
-  const defaultTagsVar =
-    Object.keys(iac.tags).length > 0
-      ? `
-variable "default_tags" {
-  description = "Tags applied to all supported resources (provider default_tags)."
-  type        = map(string)
-  default     = ${tfMapString(iac.tags)}
+  const defaultTagsVar = `
+variable "environment" {
+  description = "Deployment environment (dev, stage, prod). Merged into provider tags as Environment."
+  type        = string
+  default     = "${iac.environment}"
 }
-`
-      : '';
+
+variable "default_tags" {
+  description = "Base tags for the provider; Environment is merged from var.environment in main.tf locals."
+  type        = map(string)
+  default     = ${tfMapString(tagsForTf)}
+}
+`;
 
   return `variable "location" {
   description = "Azure region for all resources."
@@ -107,5 +110,20 @@ output "vnet_id" {
   description = "Name of the provisioned resource group."
   value       = azurerm_resource_group.main.name
 }
+
+output "environment" {
+  description = "Deployment environment passed to resources via provider tags."
+  value       = var.environment
+}
 ${vnetOutput}`;
+}
+
+/** Example tfvars for dev/stage/prod; copy to `terraform.tfvars` and adjust. */
+export function renderTerraformTfvarsExample(config: ProjectConfig): string {
+  const iac = getIacSettings(config);
+  return `# Copy to terraform.tfvars (or use -var-file) and adjust per environment.
+environment         = "${iac.environment}"
+# location            = "${config.region}"
+# resource_group_name = "${config.resourceGroupName}"
+`;
 }

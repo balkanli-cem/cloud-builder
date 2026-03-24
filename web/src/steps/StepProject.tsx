@@ -7,6 +7,8 @@ type Props = {
   setResourceGroupName: (s: string) => void;
   region: ProjectConfig['region'];
   setRegion: (r: ProjectConfig['region']) => void;
+  environment: ProjectConfig['environment'];
+  setEnvironment: (e: ProjectConfig['environment']) => void;
   regions: { value: ProjectConfig['region']; label: string }[];
   onNext: () => void;
 };
@@ -18,6 +20,8 @@ export function StepProject({
   setResourceGroupName,
   region,
   setRegion,
+  environment,
+  setEnvironment,
   regions,
   onNext,
 }: Props) {
@@ -64,6 +68,20 @@ export function StepProject({
                 {r.label}
               </option>
             ))}
+          </select>
+        </label>
+        <label>
+          <span style={{ display: 'block', marginBottom: '0.25rem', color: '#94a3b8' }}>
+            Environment (tag + IaC parameters)
+          </span>
+          <select
+            value={environment ?? 'dev'}
+            onChange={(e) => setEnvironment(e.target.value as NonNullable<ProjectConfig['environment']>)}
+            style={inputStyle}
+          >
+            <option value="dev">Development</option>
+            <option value="stage">Staging</option>
+            <option value="prod">Production</option>
           </select>
         </label>
         <button onClick={onNext} disabled={!valid} style={{ ...buttonStyle, ...(!valid && { cursor: 'not-allowed', opacity: 0.6 }) }}>

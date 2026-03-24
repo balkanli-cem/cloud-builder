@@ -155,6 +155,8 @@ resource "azurerm_mssql_server" "${id}" {
   administrator_login_password  = random_password.${id}_admin.result
   minimum_tls_version           = "1.2"
   public_network_access_enabled = false
+
+  depends_on = [random_password.${id}_admin]
 }
 
 resource "azurerm_mssql_database" "${id}" {
@@ -226,6 +228,8 @@ resource "azurerm_private_endpoint" "${id}_pe" {
   resource_group_name = azurerm_resource_group.main.name
   subnet_id           = ${subnetRef}
 
+  depends_on = [azurerm_storage_account.${id}]
+
   private_service_connection {
     name                           = "psc-blob"
     private_connection_resource_id = azurerm_storage_account.${id}.id
@@ -275,6 +279,8 @@ resource "azurerm_private_endpoint" "${id}_kv_pe" {
   location            = azurerm_resource_group.main.location
   resource_group_name = azurerm_resource_group.main.name
   subnet_id           = ${subnetRef}
+
+  depends_on = [azurerm_key_vault.${id}]
 
   private_service_connection {
     name                           = "psc-kv"
@@ -350,6 +356,8 @@ resource "azurerm_container_app" "${id}" {
   resource_group_name          = azurerm_resource_group.main.name
   revision_mode                = "Single"
 
+  depends_on = [azurerm_container_app_environment.${id}_env]
+
   template {
     container {
       name   = "${name}"
@@ -403,11 +411,15 @@ resource "azurerm_public_ip" "${id}_pip" {
     : '';
   const nicPublicIp = enablePublicIp ? `azurerm_public_ip.${id}_pip.id` : 'null';
 
+  const nicDepends = enablePublicIp ? `
+  depends_on = [azurerm_public_ip.${id}_pip]` : '';
+
   const nicBlock = `
 resource "azurerm_network_interface" "${id}_nic" {
   name                = "${nicName}"
   location            = azurerm_resource_group.main.location
   resource_group_name = azurerm_resource_group.main.name
+${nicDepends}
 
   ip_configuration {
     name                          = "internal"

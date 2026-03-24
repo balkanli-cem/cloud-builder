@@ -77,6 +77,7 @@ export const resetPasswordValidation: ValidationChain[] = [
 ];
 
 const REGIONS = ['westeurope', 'swedencentral', 'belgiumcentral'] as const;
+const ENVIRONMENTS = ['dev', 'stage', 'prod'] as const;
 
 export const generateValidation: ValidationChain[] = [
   body('format')
@@ -102,6 +103,10 @@ export const generateValidation: ValidationChain[] = [
   body('config.region')
     .isIn(REGIONS)
     .withMessage(`region must be one of: ${REGIONS.join(', ')}`),
+  body('config.environment')
+    .optional()
+    .isIn(ENVIRONMENTS)
+    .withMessage(`environment must be one of: ${ENVIRONMENTS.join(', ')}`),
   body('config.network')
     .isObject()
     .withMessage('network is required'),

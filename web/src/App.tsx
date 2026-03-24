@@ -48,6 +48,7 @@ export default function App() {
   const [projectName, setProjectName] = useState('');
   const [resourceGroupName, setResourceGroupName] = useState('');
   const [region, setRegion] = useState<ProjectConfig['region']>('westeurope');
+  const [environment, setEnvironment] = useState<ProjectConfig['environment']>('dev');
   const [network, setNetwork] = useState<NetworkConfig | null>(null);
   const [services, setServices] = useState<AzureService[]>([]);
   const [catalog, setCatalog] = useState<ServiceEntry[]>([]);
@@ -81,6 +82,7 @@ export default function App() {
     setProjectName('');
     setResourceGroupName('');
     setRegion('westeurope');
+    setEnvironment('dev');
     setNetwork(null);
     setServices([]);
     setError(null);
@@ -110,6 +112,7 @@ export default function App() {
       projectName,
       resourceGroupName: resourceGroupName || `${projectName}-rg`,
       region,
+      environment: environment ?? 'dev',
       network,
       services,
     };
@@ -118,7 +121,7 @@ export default function App() {
       if (Object.keys(iac).length > 0) base.iac = iac;
     }
     return base;
-  }, [projectName, resourceGroupName, region, network, services, iacPanelOpen, iacForm]);
+  }, [projectName, resourceGroupName, region, environment, network, services, iacPanelOpen, iacForm]);
 
   if (!token) {
     const clearResetUrl = () => {
@@ -234,6 +237,8 @@ export default function App() {
           setResourceGroupName={setResourceGroupName}
           region={region}
           setRegion={setRegion}
+          environment={environment}
+          setEnvironment={setEnvironment}
           regions={REGIONS}
           onNext={() => setStep(2)}
         />

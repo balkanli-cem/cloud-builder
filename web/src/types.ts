@@ -1,6 +1,8 @@
 // Mirrors backend ProjectConfig for API
 export type AzureRegion = 'westeurope' | 'swedencentral' | 'belgiumcentral';
 
+export type DeploymentEnvironment = 'dev' | 'stage' | 'prod';
+
 export interface SubnetConfig {
   name: string;
   addressPrefix: string;
@@ -81,6 +83,8 @@ export interface ProjectConfig {
   projectName: string;
   region: AzureRegion;
   resourceGroupName: string;
+  /** dev / stage / prod — drives Environment tag and tfvars / Bicep params. */
+  environment?: DeploymentEnvironment;
   network: NetworkConfig;
   services: AzureService[];
   /** Advanced IaC: tags, naming, SKUs, diagnostics. */

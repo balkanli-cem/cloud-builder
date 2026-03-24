@@ -82,6 +82,7 @@ export function StepSummary({
         <div><strong>Project</strong> {config.projectName}</div>
         <div><strong>Resource group</strong> {config.resourceGroupName}</div>
         <div><strong>Region</strong> {REGION_LABELS[config.region]}</div>
+        <div><strong>Environment</strong> {config.environment ?? 'dev'}</div>
         <div style={{ marginTop: '0.5rem' }}><strong>VNet</strong> {config.network.vnetName} ({config.network.addressSpace})</div>
         <div style={{ marginTop: '0.5rem' }}><strong>Services</strong>
           {config.services.map((s) => (

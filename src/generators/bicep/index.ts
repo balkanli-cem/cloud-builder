@@ -1,7 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import type { ProjectConfig } from '../../types/index';
-import { renderMainBicep } from './main';
+import { renderMainBicep, renderMainBicepparam } from './main';
 import { renderNetworkBicep } from './network';
 import { renderServiceBicep } from './services';
 
@@ -13,6 +13,12 @@ export async function generateBicep(config: ProjectConfig, outputDir: string): P
   await fs.writeFile(
     path.join(outputDir, 'main.bicep'),
     renderMainBicep(config),
+    'utf8',
+  );
+
+  await fs.writeFile(
+    path.join(outputDir, 'main.bicepparam'),
+    renderMainBicepparam(config),
     'utf8',
   );
 

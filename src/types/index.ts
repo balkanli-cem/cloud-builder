@@ -1,5 +1,8 @@
 export type AzureRegion = 'westeurope' | 'swedencentral' | 'belgiumcentral';
 
+/** Deployment slice for tagging and tfvars / Bicep parameters (dev/stage/prod). */
+export type DeploymentEnvironment = 'dev' | 'stage' | 'prod';
+
 export type OutputFormat = 'bicep' | 'terraform';
 
 export type SubnetName = 'Backend' | 'Frontend' | 'DB' | string;
@@ -58,6 +61,8 @@ export interface ProjectConfig {
   projectName: string;
   region: AzureRegion;
   resourceGroupName: string;
+  /** Used for the `Environment` tag and `var.environment` / `param environment` (default dev). */
+  environment?: DeploymentEnvironment;
   network: NetworkConfig;
   services: AzureService[];
   /** Advanced IaC: tags, naming, SKUs, diagnostics. */

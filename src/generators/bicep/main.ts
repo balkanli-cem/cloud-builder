@@ -1,6 +1,6 @@
 import type { ProjectConfig, AzureService, VMConfig, VMSSConfig } from '../../types/index';
 import { projectUsesSharedNetwork, serviceUsesSharedSubnet } from '../../core/services/networkPolicy';
-import { getIacSettings } from '../../core/iac/conventions';
+import { getIacSettings, omitEnvironmentTag } from '../../core/iac/conventions';
 import { renderBicepObjectLiteral } from '../../core/iac/bicepSerialize';
 
 function subnetRef(svc: AzureService, config: ProjectConfig): string {
@@ -15,12 +15,15 @@ function networkDependsOn(svc: AzureService): string {
 
 export function renderMainBicep(config: ProjectConfig): string {
   const iac = getIacSettings(config);
-  const tagsLiteral = renderBicepObjectLiteral(iac.tags);
+  const tagsLiteral = renderBicepObjectLiteral(omitEnvironmentTag(iac.tags));
+  const envEsc = iac.environment.replace(/'/g, "''");
   const vmZoneEsc = iac.vmAvailabilityZone.replace(/'/g, "''");
   const apimParts = iac.apimSku.split('_');
   const apimSkuName = apimParts[0] ?? 'Developer';
   const apimSkuCapacity = apimParts[1] ? parseInt(apimParts[1], 10) : 1;
   const iacParams = `
+@description('Deployment environment (dev, stage, prod). Merged into resource tags.')
+param environment string = '${envEsc}'
 param tags object = ${tagsLiteral}
 param appServicePlanSku string = '${iac.appServicePlanSku}'
 param aksNodeVmSize string = '${iac.aksNodeVmSize}'
@@ -58,7 +61,7 @@ param vmAvailabilityZone string = '${vmZoneEsc}'
     name: '${svc.name}'
     attachToSubnet: ${attach}
     subnetId: ${attach ? subnetRefStr : "''"}
-    tags: tags
+    tags: mergedTags
     aksNodeVmSize: aksNodeVmSize
     aksNodeCount: aksNodeCount
   }
@@ -85,7 +88,7 @@ param vmAvailabilityZone string = '${vmZoneEsc}'
     adminUsername: '${adminUsername}'
     osDiskSizeGb: ${osDiskSizeGb}
     adminPasswordOrKey: adminPasswordOrKey
-    tags: tags
+    tags: mergedTags
     vmAvailabilityZone: vmAvailabilityZone
   }
 }`;
@@ -113,7 +116,7 @@ param vmAvailabilityZone string = '${vmZoneEsc}'
     scaleOutCpuPercent: ${scaleOutCpuPercent}
     scaleInCpuPercent: ${scaleInCpuPercent}
     adminPasswordOrKey: adminPasswordOrKey
-    tags: tags
+    tags: mergedTags
     vmAvailabilityZone: vmAvailabilityZone
   }
 }`;
@@ -125,7 +128,7 @@ param vmAvailabilityZone string = '${vmZoneEsc}'
     location: location
     name: '${svc.name}'
     subnetId: ${subnetRefStr}
-    tags: tags
+    tags: mergedTags
     appServicePlanSku: appServicePlanSku
   }
 }`;
@@ -137,7 +140,7 @@ param vmAvailabilityZone string = '${vmZoneEsc}'
     location: location
     name: '${svc.name}'
     subnetId: ${subnetRefStr}
-    tags: tags
+    tags: mergedTags
     sqlZoneRedundant: sqlZoneRedundant
   }
 }`;
@@ -149,7 +152,7 @@ param vmAvailabilityZone string = '${vmZoneEsc}'
     location: location
     name: '${svc.name}'
     subnetId: ${subnetRefStr}
-    tags: tags
+    tags: mergedTags
     storageSkuName: storageSkuName
     enablePrivateEndpoints: enablePrivateEndpoints
   }
@@ -162,7 +165,7 @@ param vmAvailabilityZone string = '${vmZoneEsc}'
     location: location
     name: '${svc.name}'
     subnetId: ${subnetRefStr}
-    tags: tags
+    tags: mergedTags
     enablePrivateEndpoints: enablePrivateEndpoints
   }
 }`;
@@ -174,7 +177,7 @@ param vmAvailabilityZone string = '${vmZoneEsc}'
     location: location
     name: '${svc.name}'
     subnetId: ${subnetRefStr}
-    tags: tags
+    tags: mergedTags
     apimSkuName: apimSkuName
     apimSkuCapacity: apimSkuCapacity
   }
@@ -187,7 +190,7 @@ param vmAvailabilityZone string = '${vmZoneEsc}'
     location: location
     name: '${svc.name}'
     subnetId: ${subnetRefStr}
-    tags: tags
+    tags: mergedTags
     cosmosEnableFreeTier: cosmosEnableFreeTier
   }
 }`;
@@ -199,7 +202,7 @@ param vmAvailabilityZone string = '${vmZoneEsc}'
     location: location
     name: '${svc.name}'
     subnetId: ${subnetRefStr}
-    tags: tags
+    tags: mergedTags
   }
 }`;
       }
@@ -209,7 +212,7 @@ param vmAvailabilityZone string = '${vmZoneEsc}'
     location: location
     name: '${svc.name}'
     subnetId: ${subnetRefStr}
-    tags: tags
+    tags: mergedTags
   }
 }`;
     })
@@ -237,7 +240,7 @@ module network './modules/network.bicep' = {
     subnets: [
 ${subnetArray}
     ]
-    tags: tags
+    tags: mergedTags
   }
 }
 `
@@ -249,10 +252,25 @@ ${subnetArray}
 
 @description('Azure region for all resources.')
 param location string = '${config.region}'${iacParams}${secureParamBlock}
+
+var mergedTags = union(tags, { Environment: environment })
+
 ${networkBlock}
 // ─── Services ─────────────────────────────────────────────────────────────────
 
 ${moduleBlocks}
+`;
+}
+
+/** Example Bicep parameters file for multi-environment deploys (copy/adjust per env). */
+export function renderMainBicepparam(config: ProjectConfig): string {
+  const iac = getIacSettings(config);
+  const locEsc = config.region.replace(/'/g, "''");
+  const envEsc = iac.environment.replace(/'/g, "''");
+  return `using './main.bicep'
+
+param location = '${locEsc}'
+param environment = '${envEsc}'
 `;
 }
 

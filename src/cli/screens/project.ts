@@ -2,9 +2,9 @@ import { input, select } from '@inquirer/prompts';
 import chalk from 'chalk';
 import figlet from 'figlet';
 import boxen from 'boxen';
-import type { AzureRegion, ProjectConfig } from '../../types/index';
+import type { AzureRegion, DeploymentEnvironment, ProjectConfig } from '../../types/index';
 
-type ProjectResult = Pick<ProjectConfig, 'projectName' | 'resourceGroupName' | 'region'>;
+type ProjectResult = Pick<ProjectConfig, 'projectName' | 'resourceGroupName' | 'region' | 'environment'>;
 
 const NAME_REGEX = /^[a-z0-9-]+$/;
 
@@ -49,5 +49,15 @@ export async function promptProject(): Promise<ProjectResult> {
     ],
   });
 
-  return { projectName, resourceGroupName, region };
+  const environment = await select<DeploymentEnvironment>({
+    message: chalk.white('Environment') + chalk.gray(' (tags + tfvars / Bicep parameters)'),
+    choices: [
+      { name: 'Development', value: 'dev' },
+      { name: 'Staging',     value: 'stage' },
+      { name: 'Production',  value: 'prod' },
+    ],
+    default: 'dev',
+  });
+
+  return { projectName, resourceGroupName, region, environment };
 }

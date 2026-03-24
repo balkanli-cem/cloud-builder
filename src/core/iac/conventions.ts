@@ -1,16 +1,34 @@
-import type { ProjectConfig } from '../../types/index';
+import type { DeploymentEnvironment, ProjectConfig } from '../../types/index';
+
+/** Resolved environment label for tags and IaC parameters. */
+export function getDeploymentEnvironment(config: ProjectConfig): DeploymentEnvironment {
+  const fromConv = config.iac?.conventions?.tags?.Environment;
+  if (fromConv === 'dev' || fromConv === 'stage' || fromConv === 'prod') {
+    return fromConv;
+  }
+  return config.environment ?? 'dev';
+}
+
+/** Strip `Environment` so Terraform/Bicep can merge `var.environment` / `param environment`. */
+export function omitEnvironmentTag(tags: Record<string, string>): Record<string, string> {
+  const { Environment: _e, ...rest } = tags;
+  return rest;
+}
 
 /** Defaults when `config.iac` is omitted. */
 export function getIacSettings(config: ProjectConfig): IacResolved {
   const iac = config.iac ?? {};
   const conv = iac.conventions ?? {};
   const prod = iac.production ?? {};
+  const env = getDeploymentEnvironment(config);
   return {
     namePrefix: conv.namePrefix ?? '',
     nameSuffix: conv.nameSuffix ?? '',
+    environment: env,
     tags: {
       Project: config.projectName,
       ...(conv.tags ?? {}),
+      Environment: env,
     },
     enableDiagnostics: prod.enableDiagnostics ?? false,
     enablePrivateEndpoints: prod.enablePrivateEndpoints ?? false,
@@ -28,6 +46,8 @@ export function getIacSettings(config: ProjectConfig): IacResolved {
 export interface IacResolved {
   namePrefix: string;
   nameSuffix: string;
+  /** Resolved deployment environment (for parameters / variables). */
+  environment: DeploymentEnvironment;
   tags: Record<string, string>;
   enableDiagnostics: boolean;
   enablePrivateEndpoints: boolean;

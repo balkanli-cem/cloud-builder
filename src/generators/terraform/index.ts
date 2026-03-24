@@ -2,7 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import type { AzureService, ProjectConfig } from '../../types/index';
 import { projectUsesSharedNetwork } from '../../core/services/networkPolicy';
-import { renderMainTf, renderVariablesTf, renderOutputsTf } from './main';
+import { renderMainTf, renderVariablesTf, renderOutputsTf, renderTerraformTfvarsExample } from './main';
 import { renderNetworkTerraform } from './network';
 import { renderDiagnosticsTerraform } from './diagnostics';
 import { renderServiceTerraform } from './services';
@@ -39,4 +39,5 @@ export async function generateTerraform(config: ProjectConfig, outputDir: string
   }
 
   await fs.writeFile(path.join(outputDir, 'diagnostics.tf'), renderDiagnosticsTerraform(config), 'utf8');
+  await fs.writeFile(path.join(outputDir, 'terraform.tfvars.example'), renderTerraformTfvarsExample(config), 'utf8');
 }

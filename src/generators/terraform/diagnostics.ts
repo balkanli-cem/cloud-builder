@@ -20,6 +20,8 @@ export function renderDiagnosticsTerraform(config: ProjectConfig): string {
   resource_group_name = azurerm_resource_group.main.name
   sku                 = "PerGB2018"
   retention_in_days   = 30
+
+  depends_on = [azurerm_resource_group.main]
 }
 
 `;
@@ -35,6 +37,11 @@ export function renderDiagnosticsTerraform(config: ProjectConfig): string {
   target_resource_id         = azurerm_mssql_server.${id}.id
   log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
 
+  depends_on = [
+    azurerm_log_analytics_workspace.main,
+    azurerm_mssql_server.${id},
+  ]
+
   metric {
     category = "AllMetrics"
     enabled  = true
@@ -48,6 +55,11 @@ export function renderDiagnosticsTerraform(config: ProjectConfig): string {
   name                       = "${name}-st-diag"
   target_resource_id         = azurerm_storage_account.${id}.id
   log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
+
+  depends_on = [
+    azurerm_log_analytics_workspace.main,
+    azurerm_storage_account.${id},
+  ]
 
   metric {
     category = "AllMetrics"
@@ -63,6 +75,11 @@ export function renderDiagnosticsTerraform(config: ProjectConfig): string {
   target_resource_id         = azurerm_linux_web_app.${id}.id
   log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
 
+  depends_on = [
+    azurerm_log_analytics_workspace.main,
+    azurerm_linux_web_app.${id},
+  ]
+
   metric {
     category = "AllMetrics"
     enabled  = true
@@ -76,6 +93,11 @@ export function renderDiagnosticsTerraform(config: ProjectConfig): string {
   name                       = "${name}-kv-diag"
   target_resource_id         = azurerm_key_vault.${id}.id
   log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
+
+  depends_on = [
+    azurerm_log_analytics_workspace.main,
+    azurerm_key_vault.${id},
+  ]
 
   metric {
     category = "AllMetrics"

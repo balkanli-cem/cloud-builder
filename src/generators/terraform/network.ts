@@ -8,6 +8,8 @@ export function renderNetworkTerraform(network: NetworkConfig): string {
   resource_group_name  = azurerm_resource_group.main.name
   virtual_network_name = azurerm_virtual_network.main.name
   address_prefixes     = ["${s.addressPrefix}"]
+
+  depends_on = [azurerm_virtual_network.main]
 }`,
     )
     .join('\n\n');
@@ -17,6 +19,8 @@ export function renderNetworkTerraform(network: NetworkConfig): string {
   location            = azurerm_resource_group.main.location
   resource_group_name = azurerm_resource_group.main.name
   address_space       = ["${network.addressSpace}"]
+
+  depends_on = [azurerm_resource_group.main]
 }
 
 ${subnetBlocks}

@@ -4,7 +4,7 @@ Interactive Azure infrastructure builder that generates **Bicep** or **Terraform
 
 ## What it does
 
-1. **Project** — Name, resource group, Azure region (West Europe, Sweden Central, Belgium Central).
+1. **Project** — Name, resource group, Azure region (West Europe, Sweden Central, Belgium Central), and **environment** (dev / stage / prod) for the `Environment` tag and generated parameters.
 2. **Network** — Use the default VNet layout or customize: VNet name, address space (CIDR), and each subnet’s address prefix (e.g. Frontend, Backend, DB). Available in both CLI and web app.
 3. **Services** — Select Azure services, set resource names and subnet placement.
 4. **Summary** — Review, choose Bicep or Terraform, then generate. In the web app you can expand **Advanced IaC** to set optional tags, name prefix/suffix, SKUs, availability zones, diagnostics, and private endpoints (see below).
@@ -68,6 +68,16 @@ Open **http://localhost:3000**. Complete the steps and download Bicep or Terrafo
 - **Virtual Machine (VM)** — Optional public IP, NIC name, VM size, OS (Linux/Windows), admin username, OS disk size.  
 - **Virtual Machine Scale Set (VMSS)** — NIC name prefix, VM size, OS, min/max instances, and horizontal autoscale: scale-out when CPU % above a threshold, scale-in when CPU % below a threshold.  
 
+## Multi-environment parameters
+
+- **`config.environment`** — `dev` | `stage` | `prod` (default `dev`). Sets the `Environment` tag (merged with `Project` and optional `config.iac.conventions.tags`). You can override via `iac.conventions.tags.Environment` when it is one of those three values.
+- **Terraform** — `variable "environment"` in `variables.tf` (defaults from the wizard). Copy **`terraform.tfvars.example`** to `terraform.tfvars` and set `environment = "stage"` (or `prod`) per workspace. `main.tf` uses `locals.common_tags = merge(var.default_tags, { Environment = var.environment })`.
+- **Bicep** — `param environment` in `main.bicep` and `var mergedTags = union(tags, { Environment: environment })`. Use **`main.bicepparam`** as a template (`az deployment group create ... --parameters main.bicepparam`) or duplicate it per environment.
+
+## Resource ordering (Terraform)
+
+Generated Terraform adds explicit **`depends_on`** where it helps Azure creation order: resource group → VNet/subnets, SQL server on random password, private endpoints after their target resource, container app after its environment, VM NIC after public IP (when used), diagnostic settings after Log Analytics and the target resource.
+
 ## Advanced IaC (`config.iac`)
 
 Optional JSON (CLI/API) or the **Advanced IaC** panel (web) configures:
@@ -88,8 +98,8 @@ Optional JSON (CLI/API) or the **Advanced IaC** panel (web) configures:
 
 ## Output layout
 
-- **Bicep:** `main.bicep` plus `modules/network.bicep` and one module per service type (e.g. `cosmos-db.bicep`). Multiple instances of the same type each get their own deployment in `main.bicep`.
-- **Terraform:** `main.tf`, `variables.tf`, `outputs.tf`, `network.tf`, optional `diagnostics.tf`, and one `.tf` file per service type. Multiple instances of the same type are emitted as multiple resources in that file.
+- **Bicep:** `main.bicep`, **`main.bicepparam`** (example parameters for environment/location), plus `modules/network.bicep` and one module per service type (e.g. `cosmos-db.bicep`). Multiple instances of the same type each get their own deployment in `main.bicep`.
+- **Terraform:** `main.tf`, `variables.tf`, `outputs.tf`, **`terraform.tfvars.example`**, `network.tf`, optional `diagnostics.tf`, and one `.tf` file per service type. Multiple instances of the same type are emitted as multiple resources in that file.
 
 ## Tests
 

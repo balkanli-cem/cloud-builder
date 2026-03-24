@@ -24,6 +24,8 @@ describe('renderMainBicep', () => {
   it('includes location param and network module', () => {
     const out = renderMainBicep(minimalConfig());
     expect(out).toContain("param location string = 'westeurope'");
+    expect(out).toContain("param environment string = 'dev'");
+    expect(out).toContain('var mergedTags = union(tags, { Environment: environment })');
     expect(out).toContain("module network './modules/network.bicep'");
     expect(out).toContain('test-proj-vnet');
   });
