@@ -36,7 +36,7 @@ export async function promptProject(): Promise<ProjectResult> {
 
   const resourceGroupName = await input({
     message: chalk.white('Resource group name'),
-    default: `${projectName}-rg`,
+    default: `rg-${projectName}`,
     validate: validateName,
   });
 

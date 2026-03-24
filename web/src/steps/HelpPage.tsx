@@ -1,6 +1,62 @@
+import { useEffect, useState } from 'react';
+
 type Props = {
   onBack: () => void;
 };
+
+type ChangelogEntry = { date: string; title: string; bullets: string[] };
+
+function GeneratorChangelogSection() {
+  const [entries, setEntries] = useState<ChangelogEntry[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/changelog')
+      .then((r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.json() as Promise<{ entries: ChangelogEntry[] }>;
+      })
+      .then((data) => {
+        if (!cancelled) setEntries(data.entries);
+      })
+      .catch(() => {
+        if (!cancelled) setError('Could not load the generator changelog.');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (error) {
+    return <p style={{ ...bodyStyle, color: '#f87171' }}>{error}</p>;
+  }
+  if (!entries) {
+    return <p style={bodyStyle}>Loading…</p>;
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      {entries.map((e) => (
+        <div
+          key={`${e.date}-${e.title}`}
+          style={{
+            borderLeft: '2px solid #475569',
+            paddingLeft: '0.75rem',
+          }}
+        >
+          <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '0.25rem' }}>{e.date}</div>
+          <div style={{ fontWeight: 600, color: '#e2e8f0', marginBottom: '0.35rem' }}>{e.title}</div>
+          <ul style={{ ...listStyle, marginTop: 0 }}>
+            {e.bullets.map((b, i) => (
+              <li key={`${e.date}-${e.title}-${i}`}>{b}</li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 const sectionStyle: React.CSSProperties = {
   marginBottom: '1.75rem',
@@ -85,9 +141,9 @@ export function HelpPage({ onBack }: Props) {
           Starts the wizard with four steps:
         </p>
         <ul style={listStyle}>
-          <li><strong>Project</strong> — Project name (lowercase, hyphens OK), resource group name (optional; defaults to <code style={{ background: '#334155', padding: '0.1rem 0.35rem', borderRadius: '4px', fontSize: '0.8125rem' }}>project-rg</code>), and Azure region.</li>
+          <li><strong>Project</strong> — Project name (lowercase, hyphens OK), resource group name (optional; defaults to <code style={{ background: '#334155', padding: '0.1rem 0.35rem', borderRadius: '4px', fontSize: '0.8125rem' }}>{'rg-{project}'}</code>), and Azure region.</li>
           <li><strong>Network</strong> — Virtual network (VNet) and subnets. Use the default layout for a ready-made setup, or customize names and CIDR ranges. Services you add later are placed into one of these subnets.</li>
-          <li><strong>Services</strong> — Pick Azure resources (e.g. VM, VMSS). Give each a name and choose which subnet it goes in. The generated Bicep or Terraform will create these resources in Azure.</li>
+          <li><strong>Services</strong> — Pick Azure resources (e.g. VM, VMSS). Expand <strong style={{ color: '#cbd5e1' }}>What this creates</strong> under each service for cost levers, suggested destroy order, and links to Azure pricing and docs. Configure names and subnets; the ZIP matches what you selected.</li>
           <li><strong>Summary</strong> — Review and choose output format. You can download Bicep, Terraform, or both for the same design.</li>
         </ul>
       </div>
@@ -97,6 +153,14 @@ export function HelpPage({ onBack }: Props) {
         <p style={bodyStyle}>
           Same design, different formats. <strong style={{ color: '#cbd5e1' }}>Bicep</strong> is Azure’s native language; use it with Azure CLI or deployment stacks. <strong style={{ color: '#cbd5e1' }}>Terraform</strong> uses the Azure provider and fits into Terraform workflows and state. Choose the one that matches your pipeline—you can always download the other format later from My generations.
         </p>
+      </div>
+
+      <div style={sectionStyle}>
+        <h2 style={headingStyle}>Generator changelog</h2>
+        <p style={bodyStyle}>
+          Short notes when the service catalog or Bicep/Terraform templates change. For detailed history, see your Git repository.
+        </p>
+        <GeneratorChangelogSection />
       </div>
     </section>
   );

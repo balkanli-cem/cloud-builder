@@ -47,6 +47,8 @@ export default function App() {
   const [step, setStep] = useState(1);
   const [projectName, setProjectName] = useState('');
   const [resourceGroupName, setResourceGroupName] = useState('');
+  /** When false, resource group stays `rg-{projectName}` as the user edits the project name. */
+  const [resourceGroupManuallyEdited, setResourceGroupManuallyEdited] = useState(false);
   const [region, setRegion] = useState<ProjectConfig['region']>('westeurope');
   const [environment, setEnvironment] = useState<ProjectConfig['environment']>('dev');
   const [network, setNetwork] = useState<NetworkConfig | null>(null);
@@ -81,6 +83,7 @@ export default function App() {
     setStep(1);
     setProjectName('');
     setResourceGroupName('');
+    setResourceGroupManuallyEdited(false);
     setRegion('westeurope');
     setEnvironment('dev');
     setNetwork(null);
@@ -94,6 +97,15 @@ export default function App() {
   useEffect(() => {
     if (!token) setCatalog([]);
   }, [token]);
+
+  useEffect(() => {
+    if (resourceGroupManuallyEdited) return;
+    if (!projectName.trim()) {
+      setResourceGroupName('');
+      return;
+    }
+    setResourceGroupName(`rg-${projectName}`);
+  }, [projectName, resourceGroupManuallyEdited]);
 
   const fetchCatalog = useCallback(async () => {
     if (!token || catalog.length > 0) return;
@@ -110,7 +122,7 @@ export default function App() {
     if (!projectName || !network || services.length === 0) return null;
     const base: ProjectConfig = {
       projectName,
-      resourceGroupName: resourceGroupName || `${projectName}-rg`,
+      resourceGroupName: resourceGroupName || `rg-${projectName}`,
       region,
       environment: environment ?? 'dev',
       network,
@@ -235,6 +247,10 @@ export default function App() {
           setProjectName={setProjectName}
           resourceGroupName={resourceGroupName}
           setResourceGroupName={setResourceGroupName}
+          onResourceGroupManualEdit={() => setResourceGroupManuallyEdited(true)}
+          onResourceGroupBlur={() => {
+            if (!resourceGroupName.trim()) setResourceGroupManuallyEdited(false);
+          }}
           region={region}
           setRegion={setRegion}
           environment={environment}

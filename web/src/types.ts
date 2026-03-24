@@ -94,6 +94,15 @@ export interface ProjectConfig {
 /** Matches backend catalog: shared VNet subnet required vs optional (e.g. AKS managed networking). */
 export type ServiceNetworkMode = 'subnet_required' | 'subnet_optional';
 
+/** Per-service trust info from the catalog (cost, teardown, links). */
+export interface ServiceWhatCreates {
+  createsSummary: string;
+  costLevers: string[];
+  destroyOrder: string;
+  pricingUrl: string;
+  docsUrl: string;
+}
+
 export interface ServiceEntry {
   type: AzureServiceType;
   label: string;
@@ -102,4 +111,5 @@ export interface ServiceEntry {
   networkMode: ServiceNetworkMode;
   /** How this service connects to others (UI hint). */
   integrationNotes?: string;
+  whatCreates?: ServiceWhatCreates;
 }

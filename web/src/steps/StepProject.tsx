@@ -5,6 +5,10 @@ type Props = {
   setProjectName: (s: string) => void;
   resourceGroupName: string;
   setResourceGroupName: (s: string) => void;
+  /** Called when the user types in the resource group field (stops auto-sync from project name). */
+  onResourceGroupManualEdit: () => void;
+  /** If the field is cleared, auto-sync can resume on the next project name change. */
+  onResourceGroupBlur: () => void;
   region: ProjectConfig['region'];
   setRegion: (r: ProjectConfig['region']) => void;
   environment: ProjectConfig['environment'];
@@ -18,6 +22,8 @@ export function StepProject({
   setProjectName,
   resourceGroupName,
   setResourceGroupName,
+  onResourceGroupManualEdit,
+  onResourceGroupBlur,
   region,
   setRegion,
   environment,
@@ -49,8 +55,12 @@ export function StepProject({
           <input
             type="text"
             value={resourceGroupName}
-            onChange={(e) => setResourceGroupName(e.target.value)}
-            placeholder={projectName ? `${projectName}-rg` : ''}
+            onChange={(e) => {
+              onResourceGroupManualEdit();
+              setResourceGroupName(e.target.value);
+            }}
+            onBlur={onResourceGroupBlur}
+            placeholder={projectName ? `rg-${projectName}` : 'rg-my-app'}
             style={inputStyle}
           />
         </label>

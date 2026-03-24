@@ -1,6 +1,55 @@
 import { useState, useEffect } from 'react';
 import type { NetworkConfig, AzureService, ServiceEntry, VMConfig, VMSSConfig } from '../types';
 
+function WhatCreatesPanel({ entry }: { entry: ServiceEntry }) {
+  const w = entry.whatCreates;
+  if (!w) return null;
+  return (
+    <details
+      style={{
+        marginLeft: '1.5rem',
+        marginTop: '0.35rem',
+        maxWidth: '42rem',
+        borderLeft: '2px solid #334155',
+        paddingLeft: '0.65rem',
+      }}
+    >
+      <summary style={{ cursor: 'pointer', color: '#94a3b8', fontSize: '0.8125rem', userSelect: 'none' }}>
+        What this creates
+      </summary>
+      <div style={{ marginTop: '0.5rem', fontSize: '0.8125rem', color: '#cbd5e1', lineHeight: 1.5 }}>
+        <p style={{ margin: '0 0 0.5rem 0' }}>{w.createsSummary}</p>
+        <p style={{ margin: '0 0 0.25rem 0', color: '#94a3b8', fontSize: '0.75rem' }}>Cost levers</p>
+        <ul style={{ margin: '0 0 0.5rem 0', paddingLeft: '1.25rem', color: '#e2e8f0' }}>
+          {w.costLevers.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
+        <p style={{ margin: '0 0 0.5rem 0', color: '#94a3b8', fontSize: '0.75rem' }}>Destroy order (suggested)</p>
+        <p style={{ margin: '0 0 0.5rem 0' }}>{w.destroyOrder}</p>
+        <p style={{ margin: 0, fontSize: '0.75rem', color: '#64748b' }}>
+          Estimates are not guarantees—use Azure Pricing Calculator for your region and SKUs.
+        </p>
+        <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <a href={w.pricingUrl} target="_blank" rel="noopener noreferrer" style={linkStyle}>
+            Azure pricing
+          </a>
+          <a href={w.docsUrl} target="_blank" rel="noopener noreferrer" style={linkStyle}>
+            Product docs
+          </a>
+        </div>
+      </div>
+    </details>
+  );
+}
+
+const linkStyle: React.CSSProperties = {
+  color: '#60a5fa',
+  fontSize: '0.8125rem',
+  textDecoration: 'none',
+  borderBottom: '1px solid transparent',
+};
+
 type Props = {
   projectName: string;
   network: NetworkConfig;
@@ -116,6 +165,7 @@ export function StepServices({
                 {entry.integrationNotes}
               </div>
             )}
+            <WhatCreatesPanel entry={entry} />
           </div>
         ))}
       </div>
@@ -191,6 +241,7 @@ export function StepServices({
                     onChange={(updates) => setConfigs((c) => ({ ...c, [type]: { ...(c[type] as VMSSConfig), ...updates } }))}
                   />
                 )}
+                {entry && <WhatCreatesPanel entry={entry} />}
               </div>
             );
           })}

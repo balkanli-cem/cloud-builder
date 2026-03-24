@@ -12,6 +12,7 @@ import { generateTerraform } from './generators/terraform/index';
 import { validateBicep, validateTerraform } from './validation-iac';
 import { buildDefaultNetwork } from './core/network/defaults';
 import { SERVICE_CATALOG } from './core/services/catalog';
+import { GENERATOR_CHANGELOG } from './core/generator-changelog';
 import {
   saveGeneration,
   getGenerationsByUserId,
@@ -344,6 +345,11 @@ app.get('/api/generations/:id/download', generateLimiter, ...generationIdParamVa
       await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
     }
   }
+});
+
+// Generator changelog (public — short notes when templates/catalog change)
+app.get('/api/changelog', (_req, res) => {
+  res.json({ entries: GENERATOR_CHANGELOG });
 });
 
 // Service catalog and defaults for the wizard (protected so wizard is behind login)
