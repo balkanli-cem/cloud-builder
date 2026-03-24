@@ -24,7 +24,10 @@ export type AzureServiceType =
   | 'api-management'
   | 'container-apps'
   | 'vm'
-  | 'vmss';
+  | 'vmss'
+  | 'azure-ai-search'
+  | 'azure-machine-learning'
+  | 'azure-ai-foundry';
 
 export interface VMConfig {
   enablePublicIp?: boolean;
@@ -101,7 +104,8 @@ export type ServiceUiCategory =
   | 'data'
   | 'web'
   | 'integration'
-  | 'security';
+  | 'security'
+  | 'ai';
 
 /** Per-service trust info from the catalog (cost, teardown, links). */
 export interface ServiceWhatCreates {

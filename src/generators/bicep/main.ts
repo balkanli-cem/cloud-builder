@@ -206,6 +206,33 @@ param vmAvailabilityZone string = '${vmZoneEsc}'
   }
 }`;
       }
+      if (svc.type === 'azure-ai-search') {
+        const attach = usesShared;
+        return `module ${toIdentifier(svc.name)} './modules/${svc.type}.bicep' = {
+  name: '${svc.name}-deployment'
+  ${dep}params: {
+    location: location
+    name: '${svc.name}'
+    attachToSubnet: ${attach}
+    subnetId: ${attach ? subnetRefStr : "''"}
+    tags: mergedTags
+  }
+}`;
+      }
+      if (svc.type === 'azure-machine-learning' || svc.type === 'azure-ai-foundry') {
+        const kind = svc.type === 'azure-ai-foundry' ? 'Hub' : 'Default';
+        return `module ${toIdentifier(svc.name)} './modules/${svc.type}.bicep' = {
+  name: '${svc.name}-deployment'
+  ${dep}params: {
+    location: location
+    name: '${svc.name}'
+    workspaceKind: '${kind}'
+    subnetId: ${subnetRefStr}
+    tenantId: subscription().tenantId
+    tags: mergedTags
+  }
+}`;
+      }
       return `module ${toIdentifier(svc.name)} './modules/${svc.type}.bicep' = {
   name: '${svc.name}-deployment'
   ${dep}params: {

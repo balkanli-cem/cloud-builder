@@ -79,7 +79,10 @@ export type AzureServiceType =
   | 'api-management'
   | 'container-apps'
   | 'vm'
-  | 'vmss';
+  | 'vmss'
+  | 'azure-ai-search'
+  | 'azure-machine-learning'
+  | 'azure-ai-foundry';
 
 /** Options when type is 'vm' */
 export interface VMConfig {

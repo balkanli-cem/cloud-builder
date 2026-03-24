@@ -42,14 +42,14 @@ describe('renderServiceTerraform', () => {
     expect((out.match(/resource "azurerm_cosmosdb_account"/g) ?? []).length).toBe(2);
   });
 
-  it('emits data block once for multiple key vaults', () => {
+  it('emits key vault resources without embedding client config data (data source is in main.tf)', () => {
     const services: AzureService[] = [
       { type: 'key-vault', name: 'kv-a', subnetPlacement: 'Backend', config: {} },
       { type: 'key-vault', name: 'kv-b', subnetPlacement: 'Backend', config: {} },
     ];
     const out = renderServiceTerraform(baseProject(), services);
-    const dataBlockCount = (out.match(/data "azurerm_client_config" "current"/g) ?? []).length;
-    expect(dataBlockCount).toBe(1);
+    expect(out).not.toContain('data "azurerm_client_config"');
+    expect(out).toContain('azurerm_key_vault');
     expect(out).toContain('kv-a');
     expect(out).toContain('kv-b');
   });

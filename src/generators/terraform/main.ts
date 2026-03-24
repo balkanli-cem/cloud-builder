@@ -2,6 +2,15 @@ import type { ProjectConfig } from '../../types/index';
 import { getIacSettings, omitEnvironmentTag, tfMapString } from '../../core/iac/conventions';
 
 export function renderMainTf(config: ProjectConfig): string {
+  const needsClientConfig = config.services.some((s) =>
+    s.type === 'key-vault' || s.type === 'azure-machine-learning' || s.type === 'azure-ai-foundry',
+  );
+  const clientConfigBlock = needsClientConfig
+    ? `
+data "azurerm_client_config" "current" {}
+`
+    : '';
+
   const needsRandom = config.services.some(s => s.type === 'azure-sql');
   const randomProvider = needsRandom
     ? `    random = {
@@ -42,7 +51,7 @@ resource "azurerm_resource_group" "main" {
   name     = var.resource_group_name
   location = var.location
 }
-`;
+${clientConfigBlock}`;
 }
 
 export function renderVariablesTf(config: ProjectConfig): string {

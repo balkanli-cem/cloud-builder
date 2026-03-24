@@ -12,6 +12,9 @@ export function renderServiceBicep(type: AzureServiceType): string {
     case 'container-apps': return containerApps();
     case 'vm':             return vm();
     case 'vmss':           return vmss();
+    case 'azure-ai-search': return aiSearch();
+    case 'azure-machine-learning': return machineLearningWorkspace('Default');
+    case 'azure-ai-foundry': return machineLearningWorkspace('Hub');
   }
 }
 
@@ -633,5 +636,161 @@ resource autoscale 'Microsoft.Insights/autoscaleSettings@2022-10-01' = {
 }
 
 output vmssId string = vmss.id
+`;
+}
+
+// ─── Azure AI Search ──────────────────────────────────────────────────────────
+
+function aiSearch(): string {
+  return `param location string
+param name string
+@description('When true, disable public access and add a private endpoint on the subnet (ARM Search has no VNet subnet rules; use private link).')
+param attachToSubnet bool
+param subnetId string = ''
+param tags object = {}
+
+resource search 'Microsoft.Search/searchServices@2023-11-01' = {
+  name: name
+  location: location
+  tags: tags
+  sku: {
+    name: 'standard'
+  }
+  properties: {
+    hostingMode: 'default'
+    partitionCount: 1
+    replicaCount: 1
+    publicNetworkAccess: attachToSubnet ? 'disabled' : 'enabled'
+    networkRuleSet: {
+      ipRules: []
+    }
+  }
+  identity: {
+    type: 'SystemAssigned'
+  }
+}
+
+resource searchPe 'Microsoft.Network/privateEndpoints@2024-01-01' = if (attachToSubnet) {
+  name: '\${name}-search-pe'
+  location: location
+  tags: tags
+  properties: {
+    subnet: {
+      id: subnetId
+    }
+    privateLinkServiceConnections: [
+      {
+        name: 'search'
+        properties: {
+          privateLinkServiceId: search.id
+          groupIds: [
+            'searchService'
+          ]
+        }
+      }
+    ]
+  }
+}
+
+output searchId string = search.id
+output searchEndpoint string = 'https://\${name}.search.windows.net'
+`;
+}
+
+// ─── Azure Machine Learning / AI Foundry Hub ───────────────────────────────────
+
+function machineLearningWorkspace(defaultKind: 'Default' | 'Hub'): string {
+  return `param location string
+param name string
+param subnetId string
+param tags object = {}
+param tenantId string = subscription().tenantId
+param workspaceKind string = '${defaultKind}'
+
+var storageAccountName = take(replace(toLower('st\${uniqueString(resourceGroup().id, name)}'), '-', ''), 24)
+var keyVaultName = take(replace(toLower('kv\${name}ml'), '-', ''), 24)
+var insightsName = take('\${name}-mlai', 255)
+
+resource st 'Microsoft.Storage/storageAccounts@2023-05-01' = {
+  name: storageAccountName
+  location: location
+  tags: tags
+  sku: {
+    name: 'Standard_LRS'
+  }
+  kind: 'StorageV2'
+  properties: {
+    accessTier: 'Hot'
+    supportsHttpsTrafficOnly: true
+    minimumTlsVersion: 'TLS1_2'
+    allowBlobPublicAccess: false
+    networkAcls: {
+      defaultAction: 'Deny'
+      bypass: 'AzureServices'
+      virtualNetworkRules: [
+        {
+          id: subnetId
+          action: 'Allow'
+        }
+      ]
+    }
+  }
+}
+
+resource ai 'Microsoft.Insights/components@2020-02-02' = {
+  name: insightsName
+  location: location
+  tags: tags
+  kind: 'web'
+  properties: {
+    Application_Type: 'web'
+  }
+}
+
+resource kv 'Microsoft.KeyVault/vaults@2023-07-01' = {
+  name: keyVaultName
+  location: location
+  tags: tags
+  properties: {
+    tenantId: tenantId
+    sku: {
+      family: 'A'
+      name: 'standard'
+    }
+    enableRbacAuthorization: true
+    enableSoftDelete: true
+    softDeleteRetentionInDays: 90
+    enablePurgeProtection: true
+    networkAcls: {
+      defaultAction: 'Deny'
+      bypass: 'AzureServices'
+      virtualNetworkRules: [
+        {
+          id: subnetId
+          ignoreMissingVnetServiceEndpoint: false
+        }
+      ]
+    }
+  }
+}
+
+resource ws 'Microsoft.MachineLearningServices/workspaces@2024-04-01' = {
+  name: name
+  location: location
+  tags: tags
+  kind: workspaceKind
+  identity: {
+    type: 'SystemAssigned'
+  }
+  properties: {
+    friendlyName: name
+    storageAccount: st.id
+    keyVault: kv.id
+    applicationInsights: ai.id
+    publicNetworkAccess: 'Enabled'
+  }
+}
+
+output workspaceId string = ws.id
 `;
 }

@@ -84,6 +84,12 @@ export function sanitizeStorageAccountName(base: string, config: ProjectConfig):
   return s;
 }
 
+/** Key Vault name: 3–24 chars, alphanumeric and hyphens. */
+export function sanitizeKeyVaultName(base: string, config: ProjectConfig): string {
+  const raw = resolveResourceNameSegment(`${base}-mlkv`, config);
+  return raw.slice(0, 24);
+}
+
 /** Serialize Terraform map(string) default block for HCL. */
 export function tfMapString(tags: Record<string, string>): string {
   const lines = Object.entries(tags).map(([k, v]) => `    "${escapeTfInterp(k)}" = "${escapeTfInterp(v)}"`);

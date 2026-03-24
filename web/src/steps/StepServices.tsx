@@ -52,6 +52,13 @@ const CATEGORY_UI: Record<ServiceUiCategory, CategoryVisual> = {
     badgeBg: 'rgba(5, 150, 105, 0.22)',
     badgeText: '#6ee7b7',
   },
+  ai: {
+    label: 'AI & ML',
+    border: '#0891b2',
+    surface: 'linear-gradient(160deg, rgba(8, 145, 178, 0.12) 0%, rgba(15, 23, 42, 0.92) 55%)',
+    badgeBg: 'rgba(56, 189, 248, 0.22)',
+    badgeText: '#7dd3fc',
+  },
 };
 
 function WhatCreatesPanel({ entry }: { entry: ServiceEntry }) {
@@ -333,14 +340,44 @@ export function StepServices({
         })}
       </div>
       {selectedTypes.size > 0 && (
-        <div style={{ background: '#1e293b', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
-          <strong style={{ display: 'block', marginBottom: '0.5rem' }}>Configure each</strong>
+        <div style={{ marginBottom: '1rem' }}>
+          <strong style={{ display: 'block', marginBottom: '0.75rem', color: '#e2e8f0', fontSize: '0.9375rem' }}>
+            Configure each
+          </strong>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
           {Array.from(selectedTypes).map((type) => {
             const entry = catalog.find((c) => c.type === type);
+            const cat = entry ? CATEGORY_UI[entry.uiCategory] : CATEGORY_UI.web;
             const name = names[type] ?? `${projectName}-${type}`;
             return (
-              <div key={type} style={{ marginBottom: '1rem' }}>
-                <div style={{ marginBottom: '0.5rem', fontWeight: 600 }}>{entry?.label ?? type}</div>
+              <div
+                key={type}
+                style={{
+                  borderRadius: '10px',
+                  border: `2px solid ${cat.border}`,
+                  background: cat.surface,
+                  padding: '1rem',
+                  boxShadow: '0 4px 16px rgba(0, 0, 0, 0.2)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.65rem', flexWrap: 'wrap' }}>
+                  <span
+                    style={{
+                      display: 'inline-block',
+                      fontSize: '0.65rem',
+                      fontWeight: 600,
+                      letterSpacing: '0.04em',
+                      textTransform: 'uppercase',
+                      color: cat.badgeText,
+                      background: cat.badgeBg,
+                      padding: '0.15rem 0.45rem',
+                      borderRadius: '4px',
+                    }}
+                  >
+                    {cat.label}
+                  </span>
+                  <span style={{ fontWeight: 600, color: '#f1f5f9', fontSize: '0.95rem' }}>{entry?.label ?? type}</span>
+                </div>
                 <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem', color: '#94a3b8' }}>
                   Resource name
                 </label>
@@ -408,6 +445,7 @@ export function StepServices({
               </div>
             );
           })}
+          </div>
         </div>
       )}
       <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>

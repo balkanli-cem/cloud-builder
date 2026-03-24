@@ -14,7 +14,8 @@ export type ServiceUiCategory =
   | 'data'
   | 'web'
   | 'integration'
-  | 'security';
+  | 'security'
+  | 'ai';
 
 /** In-app “what this creates”: cost, teardown, and links (not legal/financial advice). */
 export interface ServiceWhatCreates {
@@ -202,6 +203,55 @@ export const SERVICE_CATALOG: ServiceEntry[] = [
       destroyOrder: 'Autoscale setting first, then scale set (instances), then related load balancers if any.',
       pricingUrl: 'https://azure.microsoft.com/pricing/details/virtual-machine-scale-sets/linux/',
       docsUrl: 'https://learn.microsoft.com/azure/virtual-machine-scale-sets/overview',
+    },
+  },
+  {
+    type: 'azure-ai-search',
+    label: 'Azure AI Search',
+    description: 'Managed search index for apps, agents, and retrieval (RAG)',
+    defaultSubnet: 'Backend',
+    networkMode: 'subnet_optional',
+    uiCategory: 'ai',
+    integrationNotes: 'Index content from storage or push JSON; pair with OpenAI or Foundry for hybrid / vector search.',
+    whatCreates: {
+      createsSummary:
+        'Search service (Standard SKU) with system-assigned identity. Terraform can add a subnet network rule; Bicep adds a private endpoint when you attach to the shared VNet (ARM has no subnet rules on the search resource itself).',
+      costLevers: ['Replica and partition counts', 'SKU tier', 'Outbound bandwidth to indexed sources'],
+      destroyOrder: 'Remove indexes and data sources, then delete the search service.',
+      pricingUrl: 'https://azure.microsoft.com/pricing/details/search/',
+      docsUrl: 'https://learn.microsoft.com/azure/search/search-what-is-azure-search',
+    },
+  },
+  {
+    type: 'azure-machine-learning',
+    label: 'Azure Machine Learning',
+    description: 'ML workspace with storage, Key Vault, and Application Insights',
+    defaultSubnet: 'Backend',
+    networkMode: 'subnet_required',
+    uiCategory: 'ai',
+    integrationNotes: 'Train and deploy models; connect compute targets and data stores from this workspace.',
+    whatCreates: {
+      createsSummary: 'Workspace (kind Default) plus dedicated storage account, Application Insights, and Key Vault with subnet network ACLs.',
+      costLevers: ['Compute clusters and endpoints you add later', 'Storage transactions', 'Key Vault operations'],
+      destroyOrder: 'Delete compute and endpoints in the workspace, then workspace-linked resources, then the workspace.',
+      pricingUrl: 'https://azure.microsoft.com/pricing/details/machine-learning/',
+      docsUrl: 'https://learn.microsoft.com/azure/machine-learning/overview-what-is-azure-machine-learning',
+    },
+  },
+  {
+    type: 'azure-ai-foundry',
+    label: 'Azure AI Foundry (Hub)',
+    description: 'AI Hub workspace for models, projects, and governance in one place',
+    defaultSubnet: 'Backend',
+    networkMode: 'subnet_required',
+    uiCategory: 'ai',
+    integrationNotes: 'Central hub for Azure AI projects; extend with connected resources and policies in the portal.',
+    whatCreates: {
+      createsSummary: 'Machine Learning workspace with kind Hub plus dedicated storage, Application Insights, and Key Vault (same pattern as a standard ML workspace).',
+      costLevers: ['Models and deployments you attach', 'Underlying storage and monitoring usage'],
+      destroyOrder: 'Remove projects and connections, then the hub workspace and dependent resources.',
+      pricingUrl: 'https://azure.microsoft.com/pricing/details/machine-learning/',
+      docsUrl: 'https://learn.microsoft.com/azure/ai-studio/concepts/azure-ai-resource-types',
     },
   },
 ];

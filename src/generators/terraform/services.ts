@@ -1,6 +1,12 @@
 import type { AzureService, VMConfig, VMSSConfig, ProjectConfig } from '../../types/index';
 import { serviceUsesSharedSubnet } from '../../core/services/networkPolicy';
-import { getIacSettings, resolveResourceNameSegment, sanitizeStorageAccountName, type IacResolved } from '../../core/iac/conventions';
+import {
+  getIacSettings,
+  resolveResourceNameSegment,
+  sanitizeKeyVaultName,
+  sanitizeStorageAccountName,
+  type IacResolved,
+} from '../../core/iac/conventions';
 import { toTfId } from './network';
 
 function getSubnetRef(svc: AzureService): string {
@@ -27,22 +33,24 @@ export function renderServiceTerraform(projectConfig: ProjectConfig, services: A
     const svcConfig = (svc.config || {}) as Record<string, unknown>;
     const sub = serviceUsesSharedSubnet(svc) ? getSubnetRef(svc) : null;
     switch (svc.type) {
-      case 'app-service':     return appService(iac, id, name, sub!);
-      case 'aks':             return aks(iac, id, name, sub);
-      case 'azure-sql':       return azureSql(iac, id, name, sub!);
-      case 'cosmos-db':       return cosmosDb(iac, id, name, sub!);
-      case 'storage-account': return storageAccount(projectConfig, iac, id, svc.name, sub!);
-      case 'key-vault':       return keyVault(projectConfig, iac, id, name, sub!);
-      case 'api-management':  return apiManagement(iac, id, name, sub!);
-      case 'container-apps':  return containerApps(iac, id, name, sub!);
-      case 'vm':              return vm(projectConfig, iac, id, name, sub!, svcConfig as VMConfig);
-      case 'vmss':            return vmss(projectConfig, iac, id, name, sub!, svcConfig as VMSSConfig);
+    case 'app-service':     return appService(iac, id, name, sub!);
+    case 'aks':             return aks(iac, id, name, sub);
+    case 'azure-sql':       return azureSql(iac, id, name, sub!);
+    case 'cosmos-db':       return cosmosDb(iac, id, name, sub!);
+    case 'storage-account': return storageAccount(projectConfig, iac, id, svc.name, sub!);
+    case 'key-vault':       return keyVault(projectConfig, iac, id, name, sub!);
+    case 'api-management':  return apiManagement(iac, id, name, sub!);
+    case 'container-apps':  return containerApps(iac, id, name, sub!);
+    case 'vm':              return vm(projectConfig, iac, id, name, sub!, svcConfig as VMConfig);
+    case 'vmss':            return vmss(projectConfig, iac, id, name, sub!, svcConfig as VMSSConfig);
+    case 'azure-ai-search': return aiSearch(iac, id, name, sub);
+    case 'azure-machine-learning':
+      return machineLearningWorkspace(projectConfig, iac, id, svc.name, sub!, 'Default');
+    case 'azure-ai-foundry':
+      return machineLearningWorkspace(projectConfig, iac, id, svc.name, sub!, 'Hub');
     }
   });
-  // Key Vault needs the client config data block once per file, not per instance
-  const fileType = services[0]?.type;
-  const prefix = fileType === 'key-vault' ? keyVaultDataBlock() : '';
-  return prefix + blocks.join('\n\n');
+  return blocks.join('\n\n');
 }
 
 // ─── App Service ──────────────────────────────────────────────────────────────
@@ -266,11 +274,6 @@ output "${id}_blob_endpoint" {
 
 // ─── Key Vault ────────────────────────────────────────────────────────────────
 
-function keyVaultDataBlock(): string {
-  return `data "azurerm_client_config" "current" {}
-`;
-}
-
 function keyVault(projectConfig: ProjectConfig, iac: IacResolved, id: string, name: string, subnetRef: string): string {
   const pe = iac.enablePrivateEndpoints
     ? `
@@ -311,6 +314,141 @@ resource "azurerm_private_endpoint" "${id}_kv_pe" {
 ${pe}
 output "${id}_uri" {
   value = azurerm_key_vault.${id}.vault_uri
+}
+`;
+}
+
+// ─── Azure AI Search ──────────────────────────────────────────────────────────
+
+function aiSearch(_iac: IacResolved, id: string, name: string, subnetRef: string | null): string {
+  const pub = subnetRef === null ? 'true' : 'false';
+  const netRules =
+    subnetRef === null
+      ? ''
+      : `
+  network_rule {
+    subnet_id = ${subnetRef}
+  }
+`;
+  return `# Azure AI Search (optional VNet subnet rule when "Use shared VNet" is enabled).
+resource "azurerm_search_service" "${id}" {
+  name                = "${name}"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+  sku                 = "standard"
+  partition_count     = 1
+  replica_count       = 1
+
+  public_network_access_enabled = ${pub}
+
+  identity {
+    type = "SystemAssigned"
+  }
+${netRules}
+}
+
+output "${id}_search_endpoint" {
+  value = azurerm_search_service.${id}.endpoint
+}
+`;
+}
+
+// ─── Azure Machine Learning / AI Foundry Hub ───────────────────────────────────
+
+function machineLearningWorkspace(
+  projectConfig: ProjectConfig,
+  iac: IacResolved,
+  id: string,
+  logicalName: string,
+  subnetRef: string,
+  kind: 'Default' | 'Hub',
+): string {
+  const name = effectiveName(projectConfig, logicalName);
+  const stName = sanitizeStorageAccountName(`${logicalName}mlst`, projectConfig);
+  const kvName = sanitizeKeyVaultName(logicalName, projectConfig);
+  const aiName = `${name}-mlai`.slice(0, 255);
+  const kindStr = kind === 'Hub' ? 'Hub' : 'Default';
+
+  return `# Azure Machine Learning workspace (${kindStr}) — dedicated dependencies in this stack.
+resource "azurerm_storage_account" "${id}_mlst" {
+  name                     = "${stName}"
+  resource_group_name      = azurerm_resource_group.main.name
+  location                 = azurerm_resource_group.main.location
+  account_tier             = "Standard"
+  account_replication_type = "${iac.storageReplication}"
+  account_kind             = "StorageV2"
+  min_tls_version          = "TLS1_2"
+
+  allow_nested_items_to_be_public = false
+
+  network_rules {
+    default_action             = "Deny"
+    bypass                     = ["AzureServices"]
+    virtual_network_subnet_ids = [${subnetRef}]
+  }
+}
+
+resource "azurerm_application_insights" "${id}_mlai" {
+  name                = "${aiName}"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  application_type    = "web"
+}
+
+resource "azurerm_key_vault" "${id}_mlkv" {
+  name                = "${kvName}"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  tenant_id           = data.azurerm_client_config.current.tenant_id
+  sku_name            = "standard"
+
+  rbac_authorization_enabled   = true
+  soft_delete_retention_days   = 90
+  purge_protection_enabled     = true
+
+  network_acls {
+    default_action             = "Deny"
+    bypass                     = ["AzureServices"]
+    virtual_network_subnet_ids = [${subnetRef}]
+  }
+}
+
+resource "azurerm_machine_learning_workspace" "${id}" {
+  name                    = "${name}"
+  location                = azurerm_resource_group.main.location
+  resource_group_name     = azurerm_resource_group.main.name
+  application_insights_id = azurerm_application_insights.${id}_mlai.id
+  key_vault_id            = azurerm_key_vault.${id}_mlkv.id
+  storage_account_id      = azurerm_storage_account.${id}_mlst.id
+  kind                    = "${kindStr}"
+
+  identity {
+    type = "SystemAssigned"
+  }
+
+  depends_on = [
+    azurerm_storage_account.${id}_mlst,
+    azurerm_key_vault.${id}_mlkv,
+    azurerm_application_insights.${id}_mlai,
+  ]
+}
+
+resource "azurerm_role_assignment" "${id}_ml_st_blob" {
+  scope                = azurerm_storage_account.${id}_mlst.id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = azurerm_machine_learning_workspace.${id}.identity[0].principal_id
+  depends_on           = [azurerm_machine_learning_workspace.${id}]
+}
+
+resource "azurerm_role_assignment" "${id}_ml_kv_secrets" {
+  scope                = azurerm_key_vault.${id}_mlkv.id
+  role_definition_name = "Key Vault Secrets User"
+  principal_id         = azurerm_machine_learning_workspace.${id}.identity[0].principal_id
+  depends_on           = [azurerm_machine_learning_workspace.${id}]
+}
+
+output "${id}_workspace_id" {
+  value = azurerm_machine_learning_workspace.${id}.id
 }
 `;
 }
