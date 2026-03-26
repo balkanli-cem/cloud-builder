@@ -1,4 +1,8 @@
+import { useState } from 'react';
 import type { ProjectConfig } from '../types';
+import { errorMessageFromApi } from '../rateLimitMessage';
+
+export type ClientOption = { id: number; name: string };
 
 type Props = {
   projectName: string;
@@ -14,8 +18,17 @@ type Props = {
   environment: ProjectConfig['environment'];
   setEnvironment: (e: ProjectConfig['environment']) => void;
   regions: { value: ProjectConfig['region']; label: string }[];
+  authToken: string;
+  clients: ClientOption[];
+  selectedClientId: number | null;
+  setSelectedClientId: (id: number | null) => void;
+  onClientsChanged: () => void;
   onNext: () => void;
 };
+
+function authHeaders(token: string): HeadersInit {
+  return { Authorization: `Bearer ${token}` };
+}
 
 export function StepProject({
   projectName,
@@ -29,9 +42,18 @@ export function StepProject({
   environment,
   setEnvironment,
   regions,
+  authToken,
+  clients,
+  selectedClientId,
+  setSelectedClientId,
+  onClientsChanged,
   onNext,
 }: Props) {
   const valid = /^[a-z0-9-]+$/.test(projectName) && /^[a-z0-9-]*$/.test(resourceGroupName);
+  const [newClientName, setNewClientName] = useState('');
+  const [clientBusy, setClientBusy] = useState(false);
+  const [clientMsg, setClientMsg] = useState<string | null>(null);
+
   return (
     <section>
       <h2 style={{ fontSize: '1.125rem', marginBottom: '1rem' }}>Project</h2>
@@ -94,6 +116,99 @@ export function StepProject({
             <option value="prod">Production</option>
           </select>
         </label>
+
+        <div
+          style={{
+            padding: '0.75rem',
+            borderRadius: '8px',
+            border: '1px solid #334155',
+            background: 'rgba(15, 23, 42, 0.6)',
+          }}
+        >
+          <span style={{ display: 'block', marginBottom: '0.5rem', color: '#94a3b8', fontSize: '0.875rem' }}>
+            Client (optional)
+          </span>
+          <p style={{ margin: '0 0 0.75rem 0', fontSize: '0.8125rem', color: '#64748b', lineHeight: 1.45 }}>
+            Tag this generation for your own organization. Only you see clients you create. Requires the database migration{' '}
+            <code style={{ color: '#94a3b8' }}>schema-clients.sql</code> on the server.
+          </p>
+          <select
+            value={selectedClientId === null ? '' : String(selectedClientId)}
+            onChange={(e) => {
+              const v = e.target.value;
+              setSelectedClientId(v === '' ? null : parseInt(v, 10));
+            }}
+            style={inputStyle}
+          >
+            <option value="">— No client —</option>
+            {clients.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            <input
+              type="text"
+              value={newClientName}
+              onChange={(e) => setNewClientName(e.target.value)}
+              placeholder="New client name"
+              style={{ ...inputStyle, flex: '1 1 10rem', minWidth: 0 }}
+              disabled={clientBusy}
+            />
+            <button
+              type="button"
+              disabled={clientBusy || !newClientName.trim()}
+              onClick={async () => {
+                setClientMsg(null);
+                setClientBusy(true);
+                try {
+                  const res = await fetch('/api/clients', {
+                    method: 'POST',
+                    headers: { ...authHeaders(authToken), 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: newClientName.trim() }),
+                  });
+                  const data = await res.json().catch(() => ({}));
+                  if (res.status === 503) {
+                    setClientMsg('Client registry is not available (database not configured).');
+                    return;
+                  }
+                  if (res.status === 409) {
+                    setClientMsg(data.error || 'A client with that name already exists.');
+                    return;
+                  }
+                  if (!res.ok) {
+                    throw new Error(errorMessageFromApi(res, data, res.statusText));
+                  }
+                  const id = (data as { id?: number }).id;
+                  setNewClientName('');
+                  await onClientsChanged();
+                  if (typeof id === 'number') setSelectedClientId(id);
+                } catch (e) {
+                  setClientMsg(e instanceof Error ? e.message : 'Could not add client.');
+                } finally {
+                  setClientBusy(false);
+                }
+              }}
+              style={{
+                padding: '0.5rem 0.75rem',
+                background: '#334155',
+                border: 'none',
+                borderRadius: '6px',
+                color: '#e2e8f0',
+                fontWeight: 600,
+                cursor: clientBusy || !newClientName.trim() ? 'not-allowed' : 'pointer',
+                opacity: clientBusy || !newClientName.trim() ? 0.6 : 1,
+              }}
+            >
+              Add client
+            </button>
+          </div>
+          {clientMsg && (
+            <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.8125rem', color: '#f87171' }}>{clientMsg}</p>
+          )}
+        </div>
+
         <button onClick={onNext} disabled={!valid} style={{ ...buttonStyle, ...(!valid && { cursor: 'not-allowed', opacity: 0.6 }) }}>
           Next: Network
         </button>

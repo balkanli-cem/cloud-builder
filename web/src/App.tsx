@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import type { ProjectConfig, NetworkConfig, AzureService, ServiceEntry } from './types';
+import type { ClientOption } from './steps/StepProject';
 import { DEFAULT_IAC_FORM, iacSettingsFromForm } from './iacForm';
 import { StepProject } from './steps/StepProject';
 import { StepNetwork } from './steps/StepNetwork';
@@ -59,6 +60,8 @@ export default function App() {
   const [downloadedFormats, setDownloadedFormats] = useState<('bicep' | 'terraform')[]>([]);
   const [iacPanelOpen, setIacPanelOpen] = useState(false);
   const [iacForm, setIacForm] = useState(() => ({ ...DEFAULT_IAC_FORM }));
+  const [clients, setClients] = useState<ClientOption[]>([]);
+  const [selectedClientId, setSelectedClientId] = useState<number | null>(null);
 
   const setToken = useCallback((t: string) => {
     setTokenState(t);
@@ -92,6 +95,7 @@ export default function App() {
     setDownloadedFormats([]);
     setIacPanelOpen(false);
     setIacForm({ ...DEFAULT_IAC_FORM });
+    setSelectedClientId(null);
   }, []);
 
   useEffect(() => {
@@ -117,6 +121,21 @@ export default function App() {
     const data = await res.json();
     setCatalog(data.services || []);
   }, [token, catalog.length, logout]);
+
+  const loadClients = useCallback(async () => {
+    if (!token) return;
+    const res = await fetch('/api/clients', { headers: authHeaders(token) });
+    if (res.status === 401) {
+      logout();
+      return;
+    }
+    const data = await res.json().catch(() => ({}));
+    setClients(data.clients || []);
+  }, [token, logout]);
+
+  useEffect(() => {
+    if (token && view === 'wizard') void loadClients();
+  }, [token, view, loadClients]);
 
   const config: ProjectConfig | null = useMemo(() => {
     if (!projectName || !network || services.length === 0) return null;
@@ -224,7 +243,7 @@ export default function App() {
             <button type="button" onClick={logout} style={headerLinkStyle}>Sign out</button>
           </div>
         </header>
-        <Dashboard token={token} onGenerateNew={() => setView('wizard')} />
+        <Dashboard token={token} onGenerateNew={() => setView('wizard')} onClientsMaybeChanged={loadClients} />
       </>
     );
   }
@@ -256,6 +275,11 @@ export default function App() {
           environment={environment}
           setEnvironment={setEnvironment}
           regions={REGIONS}
+          authToken={token}
+          clients={clients}
+          selectedClientId={selectedClientId}
+          setSelectedClientId={setSelectedClientId}
+          onClientsChanged={loadClients}
           onNext={() => setStep(2)}
         />
       )}
@@ -298,7 +322,11 @@ export default function App() {
               const res = await fetch('/api/generate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
-                body: JSON.stringify({ config, format }),
+                body: JSON.stringify({
+                  config,
+                  format,
+                  ...(selectedClientId != null ? { clientId: selectedClientId } : {}),
+                }),
               });
               if (!res.ok) {
                 const data = await res.json().catch(() => ({}));

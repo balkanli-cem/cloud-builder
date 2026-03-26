@@ -184,6 +184,20 @@ export const generateValidation: ValidationChain[] = [
     .trim()
     .isLength({ max: 64 })
     .withMessage('iac.production.apimSku too long'),
+  body('clientId')
+    .optional({ values: 'null' })
+    .isInt({ min: 1 })
+    .withMessage('clientId must be a positive integer')
+    .toInt(),
+];
+
+export const clientCreateValidation: ValidationChain[] = [
+  body('name')
+    .trim()
+    .notEmpty()
+    .withMessage('name is required')
+    .isLength({ max: 256 })
+    .withMessage('name must be at most 256 characters'),
 ];
 
 export const generationIdParamValidation: ValidationChain[] = [

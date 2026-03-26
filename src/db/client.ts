@@ -42,6 +42,15 @@ export interface GenerationRow {
   CreatedAt: Date;
   ValidationStatus?: string | null;
   ValidationMessage?: string | null;
+  ClientId?: number | null;
+  ClientName?: string | null;
+}
+
+export interface ClientRow {
+  Id: number;
+  UserId: number;
+  Name: string;
+  CreatedAt: Date;
 }
 
 /** Full row with JSON columns, for "download again" (reconstruct config and regenerate zip). */
@@ -92,73 +101,172 @@ export async function deleteGenerationByIdAndUserId(id: number, userId: number):
   }
 }
 
+function isMissingSqlColumn(err: unknown, hint: string): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return msg.includes(hint) || msg.includes('Invalid column');
+}
+
 /**
  * Saves a generation record to Azure SQL. No-op if AZURE_SQL_CONNECTION_STRING is not set.
  * userId is set when the user is logged in so generations appear in "My generations".
+ * clientId must belong to the same user (enforced by API before calling).
  * validationStatus/validationMessage are optional (run schema-validation.sql to add columns).
+ * ClientId column optional (run schema-clients.sql).
  */
 export async function saveGeneration(
   config: ProjectConfig,
   format: 'bicep' | 'terraform',
   userId?: number | null,
   validation?: { status: string; message: string } | null,
+  clientId?: number | null,
 ): Promise<void> {
   const p = await getPool();
   if (!p) return;
 
   const status = validation?.status ?? null;
   const message = validation?.message ?? null;
+  const networkJson = JSON.stringify(config.network);
+  const servicesJson = JSON.stringify(config.services);
+  const cid = userId != null ? (clientId ?? null) : null;
+
+  if (userId != null) {
+    try {
+      await p
+        .request()
+        .input('userId', sql.Int, userId)
+        .input('projectName', sql.NVarChar(256), config.projectName)
+        .input('resourceGroupName', sql.NVarChar(256), config.resourceGroupName)
+        .input('region', sql.NVarChar(64), config.region)
+        .input('networkJson', sql.NVarChar(sql.MAX as number), networkJson)
+        .input('servicesJson', sql.NVarChar(sql.MAX as number), servicesJson)
+        .input('format', sql.NVarChar(32), format)
+        .input('validationStatus', sql.NVarChar(20), status)
+        .input('validationMessage', sql.NVarChar(sql.MAX as number), message)
+        .input('clientId', sql.Int, cid)
+        .query(`
+          INSERT INTO dbo.Generations (UserId, ProjectName, ResourceGroupName, Region, NetworkJson, ServicesJson, Format, ValidationStatus, ValidationMessage, ClientId)
+          VALUES (@userId, @projectName, @resourceGroupName, @region, @networkJson, @servicesJson, @format, @validationStatus, @validationMessage, @clientId)
+        `);
+      return;
+    } catch (err) {
+      if (!(isMissingSqlColumn(err, 'ClientId') || isMissingSqlColumn(err, 'ValidationStatus') || isMissingSqlColumn(err, 'ValidationMessage'))) {
+        getLogger().error({ err }, 'Failed to save generation to DB');
+        return;
+      }
+    }
+
+    try {
+      await p
+        .request()
+        .input('userId', sql.Int, userId)
+        .input('projectName', sql.NVarChar(256), config.projectName)
+        .input('resourceGroupName', sql.NVarChar(256), config.resourceGroupName)
+        .input('region', sql.NVarChar(64), config.region)
+        .input('networkJson', sql.NVarChar(sql.MAX as number), networkJson)
+        .input('servicesJson', sql.NVarChar(sql.MAX as number), servicesJson)
+        .input('format', sql.NVarChar(32), format)
+        .input('validationStatus', sql.NVarChar(20), status)
+        .input('validationMessage', sql.NVarChar(sql.MAX as number), message)
+        .query(`
+          INSERT INTO dbo.Generations (UserId, ProjectName, ResourceGroupName, Region, NetworkJson, ServicesJson, Format, ValidationStatus, ValidationMessage)
+          VALUES (@userId, @projectName, @resourceGroupName, @region, @networkJson, @servicesJson, @format, @validationStatus, @validationMessage)
+        `);
+      return;
+    } catch (err) {
+      if (!isMissingSqlColumn(err, 'ValidationStatus') && !isMissingSqlColumn(err, 'ValidationMessage')) {
+        getLogger().error({ err }, 'Failed to save generation to DB (validation insert, no ClientId)');
+        return;
+      }
+    }
+
+    await saveGenerationUserFallbackNoValidation(p, config, format, userId, cid, networkJson, servicesJson);
+    return;
+  }
 
   try {
-    const req = p.request()
+    await p
+      .request()
       .input('projectName', sql.NVarChar(256), config.projectName)
       .input('resourceGroupName', sql.NVarChar(256), config.resourceGroupName)
       .input('region', sql.NVarChar(64), config.region)
-      .input('networkJson', sql.NVarChar(sql.MAX as number), JSON.stringify(config.network))
-      .input('servicesJson', sql.NVarChar(sql.MAX as number), JSON.stringify(config.services))
+      .input('networkJson', sql.NVarChar(sql.MAX as number), networkJson)
+      .input('servicesJson', sql.NVarChar(sql.MAX as number), servicesJson)
       .input('format', sql.NVarChar(32), format)
       .input('validationStatus', sql.NVarChar(20), status)
-      .input('validationMessage', sql.NVarChar(sql.MAX as number), message);
-    if (userId != null) {
-      req.input('userId', sql.Int, userId);
-      await req.query(`
-        INSERT INTO dbo.Generations (UserId, ProjectName, ResourceGroupName, Region, NetworkJson, ServicesJson, Format, ValidationStatus, ValidationMessage)
-        VALUES (@userId, @projectName, @resourceGroupName, @region, @networkJson, @servicesJson, @format, @validationStatus, @validationMessage)
-      `);
-    } else {
-      await req.query(`
+      .input('validationMessage', sql.NVarChar(sql.MAX as number), message)
+      .query(`
         INSERT INTO dbo.Generations (ProjectName, ResourceGroupName, Region, NetworkJson, ServicesJson, Format, ValidationStatus, ValidationMessage)
         VALUES (@projectName, @resourceGroupName, @region, @networkJson, @servicesJson, @format, @validationStatus, @validationMessage)
       `);
-    }
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('ValidationStatus') || msg.includes('ValidationMessage') || msg.includes('Invalid column')) {
+    if (isMissingSqlColumn(err, 'ValidationStatus') || isMissingSqlColumn(err, 'ValidationMessage')) {
       try {
-        const req2 = p.request()
+        await p
+          .request()
           .input('projectName', sql.NVarChar(256), config.projectName)
           .input('resourceGroupName', sql.NVarChar(256), config.resourceGroupName)
           .input('region', sql.NVarChar(64), config.region)
-          .input('networkJson', sql.NVarChar(sql.MAX as number), JSON.stringify(config.network))
-          .input('servicesJson', sql.NVarChar(sql.MAX as number), JSON.stringify(config.services))
-          .input('format', sql.NVarChar(32), format);
-        if (userId != null) {
-          req2.input('userId', sql.Int, userId);
-          await req2.query(`
-            INSERT INTO dbo.Generations (UserId, ProjectName, ResourceGroupName, Region, NetworkJson, ServicesJson, Format)
-            VALUES (@userId, @projectName, @resourceGroupName, @region, @networkJson, @servicesJson, @format)
-          `);
-        } else {
-          await req2.query(`
+          .input('networkJson', sql.NVarChar(sql.MAX as number), networkJson)
+          .input('servicesJson', sql.NVarChar(sql.MAX as number), servicesJson)
+          .input('format', sql.NVarChar(32), format)
+          .query(`
             INSERT INTO dbo.Generations (ProjectName, ResourceGroupName, Region, NetworkJson, ServicesJson, Format)
             VALUES (@projectName, @resourceGroupName, @region, @networkJson, @servicesJson, @format)
           `);
-        }
       } catch (err2) {
-        getLogger().error({ err: err2 }, 'Failed to save generation to DB (fallback insert)');
+        getLogger().error({ err: err2 }, 'Failed to save generation to DB (anon fallback)');
       }
     } else {
-      getLogger().error({ err }, 'Failed to save generation to DB');
+      getLogger().error({ err }, 'Failed to save generation to DB (anon)');
+    }
+  }
+}
+
+async function saveGenerationUserFallbackNoValidation(
+  p: sql.ConnectionPool,
+  config: ProjectConfig,
+  format: 'bicep' | 'terraform',
+  userId: number,
+  clientId: number | null,
+  networkJson: string,
+  servicesJson: string,
+): Promise<void> {
+  try {
+    await p
+      .request()
+      .input('userId', sql.Int, userId)
+      .input('projectName', sql.NVarChar(256), config.projectName)
+      .input('resourceGroupName', sql.NVarChar(256), config.resourceGroupName)
+      .input('region', sql.NVarChar(64), config.region)
+      .input('networkJson', sql.NVarChar(sql.MAX as number), networkJson)
+      .input('servicesJson', sql.NVarChar(sql.MAX as number), servicesJson)
+      .input('format', sql.NVarChar(32), format)
+      .input('clientId', sql.Int, clientId)
+      .query(`
+        INSERT INTO dbo.Generations (UserId, ProjectName, ResourceGroupName, Region, NetworkJson, ServicesJson, Format, ClientId)
+        VALUES (@userId, @projectName, @resourceGroupName, @region, @networkJson, @servicesJson, @format, @clientId)
+      `);
+  } catch (err) {
+    if (isMissingSqlColumn(err, 'ClientId')) {
+      try {
+        await p
+          .request()
+          .input('userId', sql.Int, userId)
+          .input('projectName', sql.NVarChar(256), config.projectName)
+          .input('resourceGroupName', sql.NVarChar(256), config.resourceGroupName)
+          .input('region', sql.NVarChar(64), config.region)
+          .input('networkJson', sql.NVarChar(sql.MAX as number), networkJson)
+          .input('servicesJson', sql.NVarChar(sql.MAX as number), servicesJson)
+          .input('format', sql.NVarChar(32), format)
+          .query(`
+            INSERT INTO dbo.Generations (UserId, ProjectName, ResourceGroupName, Region, NetworkJson, ServicesJson, Format)
+            VALUES (@userId, @projectName, @resourceGroupName, @region, @networkJson, @servicesJson, @format)
+          `);
+      } catch (err2) {
+        getLogger().error({ err: err2 }, 'Failed to save generation to DB (user minimal)');
+      }
+    } else {
+      getLogger().error({ err }, 'Failed to save generation to DB (user no validation)');
     }
   }
 }
@@ -174,34 +282,130 @@ export async function getGenerationsByUserId(userId: number): Promise<Generation
     const result = await p.request()
       .input('userId', sql.Int, userId)
       .query(`
-        SELECT Id, ProjectName, ResourceGroupName, Region, Format, CreatedAt, ValidationStatus, ValidationMessage
-        FROM dbo.Generations
-        WHERE UserId = @userId
-        ORDER BY CreatedAt DESC
+        SELECT g.Id, g.ProjectName, g.ResourceGroupName, g.Region, g.Format, g.CreatedAt,
+               g.ValidationStatus, g.ValidationMessage, g.ClientId, c.Name AS ClientName
+        FROM dbo.Generations g
+        LEFT JOIN dbo.Clients c ON c.Id = g.ClientId AND c.UserId = @userId
+        WHERE g.UserId = @userId
+        ORDER BY g.CreatedAt DESC
       `);
     const rows = (result as { recordset: GenerationRow[] }).recordset;
     return rows ?? [];
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('ValidationStatus') || msg.includes('ValidationMessage') || msg.includes('Invalid column')) {
+    if (
+      msg.includes('ClientId') ||
+      msg.includes('Clients') ||
+      msg.includes('ValidationStatus') ||
+      msg.includes('ValidationMessage') ||
+      msg.includes('Invalid column')
+    ) {
       try {
         const fallback = await p.request()
           .input('userId', sql.Int, userId)
           .query(`
-            SELECT Id, ProjectName, ResourceGroupName, Region, Format, CreatedAt
+            SELECT Id, ProjectName, ResourceGroupName, Region, Format, CreatedAt, ValidationStatus, ValidationMessage
             FROM dbo.Generations
             WHERE UserId = @userId
             ORDER BY CreatedAt DESC
           `);
-        const rows = (fallback as { recordset: (Omit<GenerationRow, 'ValidationStatus' | 'ValidationMessage'>)[] }).recordset;
-        return (rows ?? []).map((r) => ({ ...r, ValidationStatus: null, ValidationMessage: null }));
-      } catch {
-        getLogger().error({ err }, 'getGenerationsByUserId (fallback)');
+        const rows = (fallback as { recordset: GenerationRow[] }).recordset;
+        return (rows ?? []).map((r) => ({
+          ...r,
+          ClientId: r.ClientId ?? null,
+          ClientName: r.ClientName ?? null,
+        }));
+      } catch (err2: unknown) {
+        const msg2 = err2 instanceof Error ? err2.message : String(err2);
+        if (msg2.includes('ValidationStatus') || msg2.includes('ValidationMessage') || msg2.includes('Invalid column')) {
+          try {
+            const fb2 = await p.request()
+              .input('userId', sql.Int, userId)
+              .query(`
+                SELECT Id, ProjectName, ResourceGroupName, Region, Format, CreatedAt
+                FROM dbo.Generations
+                WHERE UserId = @userId
+                ORDER BY CreatedAt DESC
+              `);
+            const rows2 = (fb2 as { recordset: Omit<GenerationRow, 'ValidationStatus' | 'ValidationMessage'>[] }).recordset;
+            return (rows2 ?? []).map((r) => ({
+              ...r,
+              ValidationStatus: null,
+              ValidationMessage: null,
+              ClientId: null,
+              ClientName: null,
+            }));
+          } catch {
+            getLogger().error({ err: err2 }, 'getGenerationsByUserId (fallback chain)');
+            return [];
+          }
+        }
+        getLogger().error({ err: err2 }, 'getGenerationsByUserId (fallback)');
         return [];
       }
     }
     getLogger().error({ err }, 'getGenerationsByUserId');
     return [];
+  }
+}
+
+export async function listClientsByUserId(userId: number): Promise<ClientRow[]> {
+  const p = await getPool();
+  if (!p) return [];
+  try {
+    const result = await p.request()
+      .input('userId', sql.Int, userId)
+      .query(
+        `SELECT Id, UserId, Name, CreatedAt FROM dbo.Clients WHERE UserId = @userId ORDER BY Name ASC`,
+      );
+    return ((result as { recordset: ClientRow[] }).recordset ?? []) as ClientRow[];
+  } catch (err) {
+    getLogger().error({ err }, 'listClientsByUserId');
+    return [];
+  }
+}
+
+export async function findClientByIdAndUserId(clientId: number, userId: number): Promise<ClientRow | null> {
+  const p = await getPool();
+  if (!p) return null;
+  try {
+    const result = await p.request()
+      .input('clientId', sql.Int, clientId)
+      .input('userId', sql.Int, userId)
+      .query(
+        `SELECT Id, UserId, Name, CreatedAt FROM dbo.Clients WHERE Id = @clientId AND UserId = @userId`,
+      );
+    const rows = (result as { recordset: ClientRow[] }).recordset;
+    return rows[0] ?? null;
+  } catch (err) {
+    getLogger().error({ err }, 'findClientByIdAndUserId');
+    return null;
+  }
+}
+
+export async function createClient(
+  userId: number,
+  name: string,
+): Promise<{ ok: true; id: number } | { ok: false; error: 'duplicate' | 'db' }> {
+  const p = await getPool();
+  if (!p) return { ok: false, error: 'db' };
+  const trimmed = name.trim();
+  if (!trimmed) return { ok: false, error: 'db' };
+  try {
+    const result = await p.request()
+      .input('userId', sql.Int, userId)
+      .input('name', sql.NVarChar(256), trimmed)
+      .query(`INSERT INTO dbo.Clients (UserId, Name) OUTPUT INSERTED.Id AS Id VALUES (@userId, @name)`);
+    const id = (result as { recordset: { Id: number }[] }).recordset?.[0]?.Id;
+    if (id == null) return { ok: false, error: 'db' };
+    return { ok: true, id };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('UQ_Clients') || msg.includes('duplicate') || msg.includes('UNIQUE') || msg.includes('2601')) {
+      return { ok: false, error: 'duplicate' };
+    }
+    getLogger().error({ err }, 'createClient');
+    return { ok: false, error: 'db' };
   }
 }
 

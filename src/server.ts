@@ -25,6 +25,9 @@ import {
   revokeSession,
   getSessionStats,
   getRecentLoginEvents,
+  listClientsByUserId,
+  createClient,
+  findClientByIdAndUserId,
 } from './db/client';
 import { register, login, verifyToken, requestPasswordReset, resetPassword } from './auth';
 import { getClientIp, getUserAgent } from './lib/clientIp';
@@ -38,6 +41,7 @@ import {
   generationIdParamValidation,
   downloadFormatQueryValidation,
   validateGenerateConfigBody,
+  clientCreateValidation,
 } from './validation';
 import type { ProjectConfig } from './types/index';
 import { rateLimit429JsonHandler } from './rateLimitHandler';
@@ -379,7 +383,26 @@ app.post(
     next();
   },
   async (req: express.Request, res: express.Response) => {
-  const { config, format } = req.body as { config: ProjectConfig; format: 'bicep' | 'terraform' };
+  const { config, format, clientId } = req.body as {
+    config: ProjectConfig;
+    format: 'bicep' | 'terraform';
+    clientId?: number | null;
+  };
+
+  const { user } = req as express.Request & { user: AuthedUser };
+  let resolvedClientId: number | null = null;
+  if (clientId != null && Number.isFinite(clientId)) {
+    if (!process.env.AZURE_SQL_CONNECTION_STRING) {
+      res.status(503).json({ error: 'Assigning a client requires a configured database.' });
+      return;
+    }
+    const row = await findClientByIdAndUserId(clientId, user.userId);
+    if (!row) {
+      res.status(400).json({ error: 'Invalid client: not found or not yours.' });
+      return;
+    }
+    resolvedClientId = row.Id;
+  }
 
   let tempDir: string | null = null;
   try {
@@ -392,8 +415,7 @@ app.post(
 
     const validation = format === 'bicep' ? validateBicep(tempDir) : validateTerraform(tempDir);
 
-    const { user } = req as express.Request & { user: AuthedUser };
-    await saveGeneration(config, format, user.userId, validation);
+    await saveGeneration(config, format, user.userId, validation, resolvedClientId);
 
     const archive = archiver('zip', { zlib: { level: 6 } });
     res.attachment(`${config.projectName}-${format}.zip`);

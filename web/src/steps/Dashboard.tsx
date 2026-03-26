@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { errorMessageFromApi } from '../rateLimitMessage';
 
 export interface Generation {
@@ -10,11 +10,17 @@ export interface Generation {
   createdAt: string;
   validationStatus?: string | null;
   validationMessage?: string | null;
+  clientId?: number | null;
+  clientName?: string | null;
 }
+
+type ClientRow = { id: number; name: string };
 
 type Props = {
   token: string;
   onGenerateNew: () => void;
+  /** Refresh client list in the wizard after dashboard changes. */
+  onClientsMaybeChanged?: () => void;
 };
 
 function authHeaders(token: string): HeadersInit {
@@ -86,38 +92,153 @@ async function deleteGeneration(token: string, id: number): Promise<void> {
   }
 }
 
-export function Dashboard({ token, onGenerateNew }: Props) {
+export function Dashboard({ token, onGenerateNew, onClientsMaybeChanged }: Props) {
   const [generations, setGenerations] = useState<Generation[]>([]);
+  const [clients, setClients] = useState<ClientRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState<string | null>(null); // e.g. "123-bicep" or "123-terraform"
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [newClientName, setNewClientName] = useState('');
+  const [clientBusy, setClientBusy] = useState(false);
+  const [clientError, setClientError] = useState<string | null>(null);
+
+  const reloadAll = useCallback(async (): Promise<void> => {
+    const [gr, cl] = await Promise.all([
+      fetch('/api/generations', { headers: authHeaders(token) }),
+      fetch('/api/clients', { headers: authHeaders(token) }),
+    ]);
+    if (gr.status === 401 || cl.status === 401) return;
+    if (gr.ok) {
+      const data = await gr.json();
+      setGenerations(data.generations || []);
+    } else {
+      setGenerations([]);
+    }
+    if (cl.ok) {
+      const cdata = await cl.json();
+      setClients(cdata.clients || []);
+    } else {
+      setClients([]);
+    }
+  }, [token]);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetch('/api/generations', { headers: authHeaders(token) })
-      .then((res) => {
-        if (res.status === 401) return null;
-        return res.json();
-      })
-      .then((data) => {
-        if (cancelled) return;
-        if (data?.generations) setGenerations(data.generations);
-        else setGenerations([]);
-      })
-      .catch(() => {
-        if (!cancelled) setError('Failed to load your generations.');
-      })
-      .finally(() => {
+    (async () => {
+      try {
+        await reloadAll();
+      } catch {
+        if (!cancelled) setError('Failed to load your data.');
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    })();
     return () => { cancelled = true; };
-  }, [token]);
+  }, [token, reloadAll]);
 
   return (
     <section style={{ maxWidth: '36rem', margin: '0 auto' }}>
+      <div style={{ marginBottom: '1.75rem' }}>
+        <h2 style={{ fontSize: '1.125rem', margin: '0 0 0.75rem 0' }}>My clients</h2>
+        <p style={{ margin: '0 0 0.75rem 0', fontSize: '0.8125rem', color: '#64748b', lineHeight: 1.5 }}>
+          Clients are private to your account. Use them on the Project step to tag new generations.
+        </p>
+        {clients.length === 0 && !clientBusy ? (
+          <p style={{ margin: 0, fontSize: '0.875rem', color: '#64748b' }}>No clients yet — add one below or from the generator wizard.</p>
+        ) : (
+          <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 0.75rem 0' }}>
+            {clients.map((c) => (
+              <li
+                key={c.id}
+                style={{
+                  padding: '0.5rem 0.75rem',
+                  marginBottom: '0.35rem',
+                  background: '#1e293b',
+                  borderRadius: '6px',
+                  border: '1px solid #334155',
+                  color: '#e2e8f0',
+                  fontSize: '0.875rem',
+                }}
+              >
+                {c.name}
+              </li>
+            ))}
+          </ul>
+        )}
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          <input
+            type="text"
+            value={newClientName}
+            onChange={(e) => setNewClientName(e.target.value)}
+            placeholder="New client name"
+            disabled={clientBusy}
+            style={{
+              flex: '1 1 12rem',
+              minWidth: 0,
+              padding: '0.5rem 0.75rem',
+              background: '#1e293b',
+              border: '1px solid #334155',
+              borderRadius: '6px',
+              color: '#e2e8f0',
+              fontSize: '1rem',
+            }}
+          />
+          <button
+            type="button"
+            disabled={clientBusy || !newClientName.trim()}
+            onClick={async () => {
+              setClientError(null);
+              setClientBusy(true);
+              try {
+                const res = await fetch('/api/clients', {
+                  method: 'POST',
+                  headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ name: newClientName.trim() }),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (res.status === 503) {
+                  setClientError('Database not configured for clients.');
+                  return;
+                }
+                if (res.status === 409) {
+                  setClientError((data as { error?: string }).error || 'Duplicate name.');
+                  return;
+                }
+                if (!res.ok) {
+                  setClientError((data as { error?: string }).error || 'Could not add client.');
+                  return;
+                }
+                setNewClientName('');
+                await reloadAll();
+                onClientsMaybeChanged?.();
+              } catch {
+                setClientError('Could not add client.');
+              } finally {
+                setClientBusy(false);
+              }
+            }}
+            style={{
+              padding: '0.5rem 1rem',
+              background: '#334155',
+              border: 'none',
+              borderRadius: '6px',
+              color: '#e2e8f0',
+              fontWeight: 600,
+              cursor: clientBusy || !newClientName.trim() ? 'not-allowed' : 'pointer',
+              opacity: clientBusy || !newClientName.trim() ? 0.6 : 1,
+            }}
+          >
+            Add client
+          </button>
+        </div>
+        {clientError && (
+          <p style={{ color: '#f87171', fontSize: '0.8125rem', margin: '0.5rem 0 0 0' }}>{clientError}</p>
+        )}
+      </div>
+
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '0.75rem' }}>
         <h2 style={{ fontSize: '1.125rem', margin: 0 }}>My generations</h2>
         <button
@@ -173,6 +294,9 @@ export function Dashboard({ token, onGenerateNew }: Props) {
               </div>
               <div style={{ marginTop: '0.25rem', fontSize: '0.8125rem', color: '#94a3b8' }}>
                 {g.resourceGroupName} · {g.region}
+                {g.clientName ? (
+                  <span style={{ marginLeft: '0.5rem', color: '#64748b' }}>· Client: {g.clientName}</span>
+                ) : null}
               </div>
               <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
                 <span style={{ color: '#64748b', fontSize: '0.8125rem', marginRight: '0.25rem' }}>Download:</span>

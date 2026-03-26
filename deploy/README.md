@@ -37,7 +37,7 @@ Run the scripts once against the new database (using Azure Data Studio, sqlcmd, 
 
 **Order matters:** run **`users.sql`** first (creates the Users table for login; passwords stored as bcrypt hashes). Then run **`schema.sql`** (creates the Generations table and links it to Users for "My generations"). For forgot-password, run **`schema-password-reset.sql`** to add reset token columns to Users. For IaC validation badges in the dashboard, run **`schema-validation.sql`** to add ValidationStatus and ValidationMessage to Generations. Set **JWT_SECRET** in the Web App application settings for production. Set **NODE_ENV** to **`production`** so the app enables HSTS and CSP `upgrade-insecure-requests` (security headers are applied via Helmet for all environments). For password reset emails, set **PUBLIC_APP_URL** to your app’s base URL (e.g. `https://your-app.azurewebsites.net`) so reset links are correct; without it, the server logs the link in non-production.
 
-If you already had a Generations table without a user link, run **`schema-add-user-id.sql`** to add the `UserId` column and FK.
+If you already had a Generations table without a user link, run **`schema-add-user-id.sql`** to add the `UserId` column and FK. For per-user **clients** (tag generations by client on the Project step), run **`schema-clients.sql`** after `users.sql` and `schema.sql`.
 
 ## 3. Deploy the application
 
