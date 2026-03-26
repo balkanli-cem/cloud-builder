@@ -49,7 +49,13 @@ export function StepProject({
   onClientsChanged,
   onNext,
 }: Props) {
-  const valid = /^[a-z0-9-]+$/.test(projectName) && /^[a-z0-9-]*$/.test(resourceGroupName);
+  // Azure naming is lowercase; accept any casing in the fields and normalize on Continue.
+  const projectNorm = projectName.trim().toLowerCase();
+  const resourceGroupNorm = resourceGroupName.trim().toLowerCase();
+  const valid =
+    projectNorm.length > 0 &&
+    /^[a-z0-9-]+$/.test(projectNorm) &&
+    /^[a-z0-9-]*$/.test(resourceGroupNorm);
   const [newClientName, setNewClientName] = useState('');
   const [clientBusy, setClientBusy] = useState(false);
   const [clientMsg, setClientMsg] = useState<string | null>(null);
@@ -209,7 +215,16 @@ export function StepProject({
           )}
         </div>
 
-        <button onClick={onNext} disabled={!valid} style={{ ...buttonStyle, ...(!valid && { cursor: 'not-allowed', opacity: 0.6 }) }}>
+        <button
+          type="button"
+          onClick={() => {
+            setProjectName(projectNorm);
+            setResourceGroupName(resourceGroupNorm);
+            onNext();
+          }}
+          disabled={!valid}
+          style={{ ...buttonStyle, ...(!valid && { cursor: 'not-allowed', opacity: 0.6 }) }}
+        >
           Next: Network
         </button>
       </div>
