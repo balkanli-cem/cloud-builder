@@ -137,9 +137,6 @@ function adminApiKeyMiddleware(_req: express.Request, res: express.Response, nex
   next();
 }
 
-// Serve built frontend (after npm run build:web)
-app.use(express.static(WEB_DIR));
-
 // Health: liveness (app is up) and readiness (app + optional DB)
 app.get('/api/health', (_req, res) => {
   res.status(200).json({ status: 'ok' });
@@ -262,6 +259,39 @@ app.get('/api/me', authMiddleware, (req, res) => {
   res.json({ email: user.email });
 });
 
+// User-scoped clients (requires DB + schema-clients.sql)
+app.get('/api/clients', authMiddleware, async (req, res) => {
+  const { user } = req as express.Request & { user: AuthedUser };
+  try {
+    const rows = await listClientsByUserId(user.userId);
+    res.json({
+      clients: rows.map((c) => ({ id: c.Id, name: c.Name, createdAt: c.CreatedAt })),
+    });
+  } catch (err) {
+    getLogger().error({ err }, 'GET /api/clients failed');
+    res.status(500).json({ error: 'Failed to load clients.' });
+  }
+});
+
+app.post('/api/clients', authMiddleware, ...clientCreateValidation, handleValidationErrors, async (req, res) => {
+  const { user } = req as express.Request & { user: AuthedUser };
+  const { name } = req.body as { name: string };
+  if (!process.env.AZURE_SQL_CONNECTION_STRING) {
+    res.status(503).json({ error: 'Client registry requires a configured database.' });
+    return;
+  }
+  const result = await createClient(user.userId, name);
+  if (!result.ok) {
+    if (result.error === 'duplicate') {
+      res.status(409).json({ error: 'You already have a client with that name.' });
+      return;
+    }
+    res.status(500).json({ error: 'Could not create client.' });
+    return;
+  }
+  res.status(201).json({ id: result.id, name: name.trim() });
+});
+
 // List generations for the current user (for "My generations" dashboard)
 app.get('/api/generations', authMiddleware, async (req, res) => {
   const { user } = req as express.Request & { user: AuthedUser };
@@ -276,6 +306,8 @@ app.get('/api/generations', authMiddleware, async (req, res) => {
       createdAt: g.CreatedAt,
       validationStatus: g.ValidationStatus ?? null,
       validationMessage: g.ValidationMessage ?? null,
+      clientId: g.ClientId ?? null,
+      clientName: g.ClientName ?? null,
     }));
     res.json({ generations });
   } catch (err) {
@@ -435,6 +467,9 @@ app.post(
   }
 },
 );
+
+// Built frontend assets (after all /api routes so API is never shadowed)
+app.use(express.static(WEB_DIR));
 
 // SPA fallback (only if built)
 app.get('*', async (_req, res) => {
